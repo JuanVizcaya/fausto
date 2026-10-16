@@ -20,8 +20,9 @@ fast-start version.
   `system/agents/*.yaml` charters
 - `go run ./cmd/fausto jira sync [-dry-run]` — mirror tasks as Jira issues
   (needs the `FAUSTO_JIRA_*` variables; see `README.md`)
-- `go run ./cmd/fausto project add|list|rm` and `task pull|start|done <…>` —
-  projects and tasks in the database (needs `FAUSTO_MONGO_URI`)
+- `go run ./cmd/fausto project add|list|rm`, `charters import|export|list`
+  and `task pull|start|done <…>` — projects, the agent charters fausto
+  keeps, and tasks in the database (needs `FAUSTO_MONGO_URI`)
 - `cd web && npm run dev` — live-reload dev server for the web UI
 
 ## Where things live
@@ -38,7 +39,8 @@ fast-start version.
   `mongostore` (MongoDB), both held to `storetest`
 - `internal/proposal` — proposals as stored edits: review against the
   current base, accept onto a branch (or pull request) of their own, sync
-  to applied or withdrawn once merged or closed, reject
+  to applied or withdrawn once merged or closed, reject;
+  `charters.go` lays the charters fausto keeps over `system/agents/`
 - `internal/source` — a project's repository: a local clone, or GitHub
   (fausto's own clone, branches pushed and pull requests opened with
   `FAUSTO_GITHUB_TOKEN`)

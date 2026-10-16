@@ -8,6 +8,7 @@
 //	fausto agents [-root dir]
 //	fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
 //	fausto project list|add|rm ...
+//	fausto charters import|export|list [-root dir] [-project id] [-force]
 //	fausto jira sync [-project id] [-dry-run] [task ...]
 //	fausto task list|pull|start|done|drop [-project id] ...
 //
@@ -50,13 +51,16 @@ func main() {
 
 const usage = `usage:
   fausto check [-root dir] [-json] [check ...]
-  fausto agents [-root dir]    regenerate .claude/agents and .github/CODEOWNERS
-                               from system/agents
+  fausto agents [-root dir] [-project id]
+                               regenerate .claude/agents and .github/CODEOWNERS
+                               from the charters (fausto's, or system/agents)
   fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
                                the web UI, for every project (or only -root)
   fausto project list
   fausto project add <id> -path <clone> | -github owner/repo [-name name] [-base branch] [-adopt]
   fausto project rm <id>
+  fausto charters import|export|list [-root dir] [-project id] [-force]
+                               move the agent charters into fausto's database, or back
   fausto jira sync [-project id] [-dry-run] [task ...]
                                mirror tasks as Jira issues (needs FAUSTO_JIRA_*)
   fausto task list [-project id] [-agent id] [-status s,...]
@@ -87,6 +91,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runTask(args[1:], stdout, stderr)
 	case "project":
 		return runProject(args[1:], stdout, stderr)
+	case "charters":
+		return runCharters(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintln(stderr, usage)
 		fmt.Fprintln(stderr, "checks:", strings.Join(check.Names(), ", "))
@@ -98,6 +104,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("check", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	root := rootFlag(fs)
+	project := projectFlag(fs)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -106,7 +113,9 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	report, err := check.Run(*root, fs.Args())
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	report, err := check.RunWith(*root, fs.Args(), specOptions(ctx, *root, *project, stderr))
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -133,6 +142,7 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("agents", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	root := rootFlag(fs)
+	project := projectFlag(fs)
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -140,7 +150,9 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	s, err := spec.Load(*root)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	s, err := spec.LoadWith(*root, specOptions(ctx, *root, *project, stderr))
 	if err != nil {
 		fmt.Fprintln(stderr, "load the spec:", err)
 		return 1

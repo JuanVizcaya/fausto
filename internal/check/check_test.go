@@ -621,3 +621,44 @@ func TestLayoutFile(t *testing.T) {
 		t.Errorf("schema with an unknown layout key: %+v", r)
 	}
 }
+
+// Charters kept in fausto: given to RunWith, they replace the repository's,
+// and only CODEOWNERS has to match them in the repository.
+func TestChartersFromFausto(t *testing.T) {
+	files := fixture(t)
+	// A project whose charters fausto keeps has no agent definitions.
+	files["system/agents/human.yaml"] = strings.Replace(files["system/agents/human.yaml"], "[system/, .claude/]", "[system/]", 1)
+	charters := map[string][]byte{}
+	for name, content := range files {
+		if id, ok := strings.CutPrefix(name, "system/agents/"); ok {
+			charters[strings.TrimSuffix(id, ".yaml")] = []byte(content)
+			delete(files, name)
+		}
+	}
+	root := write(t, files)
+	report, err := RunWith(root, nil, spec.Options{Charters: charters})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range report.Results {
+		if r.Status != Pass {
+			t.Errorf("%s: status %s, findings %+v", r.Check, r.Status, r.Findings)
+		}
+	}
+
+	// Without them (as in CI), ownership can't be known: those checks are
+	// skipped, and owners aren't checked against charters.
+	report, err = Run(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range report.Results {
+		want := Pass
+		if r.Check == "ownership" || r.Check == "agents" {
+			want = Skipped
+		}
+		if r.Status != want {
+			t.Errorf("without charters, %s: status %s (want %s), findings %+v", r.Check, r.Status, want, r.Findings)
+		}
+	}
+}

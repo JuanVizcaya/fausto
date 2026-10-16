@@ -44,7 +44,8 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		}
 		pending := []store.Task{{ID: "t1", Agent: "platform", Status: "open", Title: "A", Body: "Do A.\n"}}
 		if err := s.MoveProposal(ctx, p.ID, "open", "accepted", store.ProposalUpdate{Date: "2026-10-03", Commit: "def",
-			Branch: "fausto/a", PR: 7, URL: "https://github.com/o/r/pull/7", PendingTasks: pending}); err != nil {
+			Branch: "fausto/a", PR: 7, URL: "https://github.com/o/r/pull/7", PendingTasks: pending,
+			PendingCharters: map[string]string{"x": "id: x\n", "y": ""}, CharterDiff: "+id: x"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.MoveProposal(ctx, p.ID, "open", "rejected", store.ProposalUpdate{}); !errors.Is(err, store.ErrChanged) {
@@ -58,7 +59,8 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		}
 		got, _ = s.Proposal(ctx, p.ID)
 		if got.Status != "accepted" || got.Accepted != "2026-10-03" || got.Commit != "def" || got.Branch != "fausto/a" || got.PR != 7 ||
-			got.URL != "https://github.com/o/r/pull/7" || len(got.PendingTasks) != 1 || got.PendingTasks[0].Body != "Do A.\n" || len(got.Tasks) != 0 {
+			got.URL != "https://github.com/o/r/pull/7" || len(got.PendingTasks) != 1 || got.PendingTasks[0].Body != "Do A.\n" || len(got.Tasks) != 0 ||
+			len(got.PendingCharters) != 2 || got.PendingCharters["y"] != "" || got.CharterDiff != "+id: x" {
 			t.Errorf("accepted = %+v", got)
 		}
 		if err := s.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: "2026-10-04", Merged: "fed", Tasks: []string{"t1"}}); err != nil {
@@ -76,6 +78,23 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		}
 		if _, err := s.Proposal(ctx, "nope"); !errors.Is(err, store.ErrNotFound) {
 			t.Errorf("unknown: err = %v", err)
+		}
+	})
+
+	t.Run("charters", func(t *testing.T) {
+		s := open(t)
+		if got, err := s.Charters(ctx); err != nil || len(got) != 0 {
+			t.Errorf("no charters = %+v, %v", got, err)
+		}
+		if err := s.PutCharters(ctx, []store.Charter{{ID: "b", YAML: "id: b\n"}, {ID: "a", YAML: "id: a\n"}}, nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.PutCharters(ctx, []store.Charter{{ID: "a", YAML: "id: a\nname: A\n"}}, []string{"b", "nope"}); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.Charters(ctx)
+		if err != nil || len(got) != 1 || got[0].ID != "a" || got[0].YAML != "id: a\nname: A\n" || got[0].Updated.IsZero() {
+			t.Errorf("charters = %+v, %v", got, err)
 		}
 	})
 

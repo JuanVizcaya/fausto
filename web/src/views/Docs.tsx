@@ -305,6 +305,7 @@ const commands: [string, string][] = [
   ["fausto agents", "Regenerate .claude/agents/*.md and .github/CODEOWNERS from the agent charters."],
   ["fausto serve", "This UI, for every project (or only -root). Editing needs the database and a git identity."],
   ["fausto project add <id> -path <clone> | -github owner/repo", "Register a project; list and rm show and remove them."],
+  ["fausto charters import | export | list", "Move a project's agent charters into fausto, or back into system/agents/."],
   ["fausto task pull <agent>", "Write the agent's open tasks to .fausto/tasks/ and remove closed ones."],
   ["fausto task start | done | drop <id>", "Change a task's status, record who did it, and move its Jira issue."],
   ["fausto task list [-agent a] [-status s]", "List tasks from the database."],

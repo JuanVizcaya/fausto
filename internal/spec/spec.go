@@ -34,6 +34,9 @@ type Spec struct {
 	Decisions    []Decision
 	// Layout is where the project keeps its code (see LayoutFile).
 	Layout Layout
+	// Charters says where the agent charters came from: ChartersInRepo,
+	// ChartersInFausto, or "" when there are none, so ownership is unknown.
+	Charters string
 	// Documents holds every file in JSON-compatible form, for schema validation.
 	Documents []Document
 }
@@ -347,10 +350,30 @@ func (c *Component) Uses(target string, protocols ...string) bool {
 	return false
 }
 
+// Where agent charters come from.
+const (
+	ChartersInRepo   = "repo"   // system/agents/*.yaml in the repository
+	ChartersInFausto = "fausto" // fausto's database
+)
+
+// Options change how Load reads a spec.
+type Options struct {
+	// Charters, when not nil, are the agent charters (YAML, by agent id)
+	// fausto keeps for the project; they replace any under system/agents/.
+	Charters map[string][]byte
+}
+
+// AgentFile is where agent id's charter lives in a project that keeps its
+// charters, and where fausto shows it in one that doesn't.
+func AgentFile(id string) string { return Dir + "/agents/" + id + ".yaml" }
+
 // Load reads the spec under root/system. It returns an error only for files
 // that are missing or cannot be parsed; content problems are left to
 // validation.
-func Load(root string) (*Spec, error) {
+func Load(root string) (*Spec, error) { return LoadWith(root, Options{}) }
+
+// LoadWith is Load with options.
+func LoadWith(root string, o Options) (*Spec, error) {
 	s := &Spec{}
 	var errs []error
 	layout, err := LoadLayout(root)
@@ -388,14 +411,34 @@ func Load(root string) (*Spec, error) {
 		s.Documents = append(s.Documents, Document{Path: rel, Schema: f.schema, Value: v})
 	}
 
-	agentFiles, err := listFiles(root, "agents", ".yaml")
-	errs = append(errs, err)
-	for _, rel := range agentFiles {
-		data, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil {
-			errs = append(errs, err)
-			continue
+	charters := map[string][]byte{}
+	if o.Charters != nil {
+		for id, data := range o.Charters {
+			charters[AgentFile(id)] = data
 		}
+		s.Charters = ChartersInFausto
+	} else {
+		agentFiles, err := listFiles(root, "agents", ".yaml")
+		errs = append(errs, err)
+		for _, rel := range agentFiles {
+			data, err := os.ReadFile(filepath.Join(root, rel))
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			charters[rel] = data
+		}
+		if len(charters) > 0 {
+			s.Charters = ChartersInRepo
+		}
+	}
+	agentFiles := make([]string, 0, len(charters))
+	for rel := range charters {
+		agentFiles = append(agentFiles, rel)
+	}
+	sort.Strings(agentFiles)
+	for _, rel := range agentFiles {
+		data := charters[rel]
 		var a Agent
 		v, err := decode(rel, data, &a)
 		if err != nil {

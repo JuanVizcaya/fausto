@@ -13,6 +13,8 @@ export interface Spec {
   agents: Agent[];
   decisions: Decision[];
   tasks: Task[];
+  /** Where the agent charters are kept: in the repository's system/agents/, or in fausto. */
+  charters: "repo" | "fausto" | "";
 }
 
 export interface System {

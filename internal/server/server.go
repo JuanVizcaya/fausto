@@ -67,13 +67,26 @@ func New(o Options) *Handler {
 		panic(err) // dist is embedded at build time
 	}
 	mux := http.NewServeMux()
+	// The spec as fausto sees it: with the charters it keeps, if it does.
+	specOptions := func(r *http.Request) (spec.Options, error) {
+		if proposals == nil {
+			return spec.Options{}, nil
+		}
+		return proposals.SpecOptions(r.Context())
+	}
 	mux.HandleFunc("GET /api/spec", func(w http.ResponseWriter, r *http.Request) {
-		s, err := spec.Load(root)
+		opts, err := specOptions(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "load charters: " + err.Error()})
+			return
+		}
+		s, err := spec.LoadWith(root, opts)
 		if err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
 		v := view(s)
+		v.Charters = s.Charters
 		// Tasks live in the database, not the spec; the UI gets them along.
 		if proposals != nil {
 			if v.Tasks, err = proposals.DB.Tasks(r.Context(), store.TaskFilter{}); err != nil {
@@ -84,7 +97,12 @@ func New(o Options) *Handler {
 		writeJSON(w, http.StatusOK, v)
 	})
 	mux.HandleFunc("GET /api/check", func(w http.ResponseWriter, r *http.Request) {
-		report, err := check.Run(root, nil)
+		opts, err := specOptions(r)
+		if err != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "load charters: " + err.Error()})
+			return
+		}
+		report, err := check.RunWith(root, nil, opts)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -168,6 +186,9 @@ type specView struct {
 	Agents       []agentView       `json:"agents"`
 	Decisions    []decisionView    `json:"decisions"`
 	Tasks        []store.Task      `json:"tasks"`
+	// Charters is where the agent charters are kept: "repo", "fausto", or
+	// "" when there are none.
+	Charters string `json:"charters"`
 }
 
 type agentView struct {

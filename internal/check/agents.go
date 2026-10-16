@@ -1,20 +1,26 @@
 package check
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
 
 	"github.com/JuanVizcaya/fausto/internal/agentdef"
+	"github.com/JuanVizcaya/fausto/internal/spec"
 )
 
-// checkAgents verifies that the files generated from the agent charters,
-// the Claude Code agent definitions in .claude/agents and .github/CODEOWNERS,
-// match the charters.
+// checkAgents verifies that the files generated from the agent charters
+// match the charters: .github/CODEOWNERS and, for charters kept in the
+// repository, the Claude Code agent definitions in .claude/agents. Fausto
+// serves the definitions of the charters it keeps itself.
 func checkAgents(r *Repo) []Finding {
 	stale, err := agentdef.Sync(r.Root, r.Spec)
 	if err != nil {
 		return []Finding{{Message: err.Error(), Path: agentdef.Dir}}
+	}
+	if r.Spec.Charters == spec.ChartersInFausto {
+		maps.DeleteFunc(stale, func(p string, _ []byte) bool { return p != agentdef.CodeOwners })
 	}
 	paths := make([]string, 0, len(stale))
 	for p := range stale {

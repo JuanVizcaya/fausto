@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -97,24 +98,60 @@ func (s *Store) today() string { return s.now().Format("2006-01-02") }
 // applied is the base branch with a proposal's edits applied.
 type applied struct {
 	baseHead string
-	dir      string     // the materialized result
-	files    edit.Files // the files the edits wrote, agent definitions included
+	dir      string // the materialized result, charters included
+	// files are what the edits wrote that go into a commit: the spec, and
+	// the files generated from the charters.
+	files edit.Files
+	// For a project whose charters fausto keeps: overlay puts them in the
+	// base tree, and charters are the ones the edits changed, by agent id
+	// (nil removes one); they go to the database, not into a commit.
+	overlay  edit.Files
+	charters map[string][]byte
 	cleanup  func()
 }
 
-// apply materializes baseHead with changes applied (dated date). A
-// failure to apply is returned as a ConflictError.
-func (s *Store) apply(baseHead string, changes []edit.Change, date string) (*applied, error) {
+// kept reports whether fausto keeps the project's charters.
+func (a *applied) kept() bool { return a.overlay != nil }
+
+// specOptions are the options to read the result with.
+func (a *applied) specOptions() (spec.Options, error) {
+	if !a.kept() {
+		return spec.Options{}, nil
+	}
+	ch, err := dirCharters(a.dir)
+	return spec.Options{Charters: ch}, err
+}
+
+// apply materializes baseHead, with the charters fausto keeps (ch, nil
+// when it keeps none), and changes applied (dated date). A failure to
+// apply is returned as a ConflictError.
+func (s *Store) apply(baseHead string, changes []edit.Change, date string, ch map[string][]byte) (*applied, error) {
 	dir, cleanup, err := s.materialize(baseHead)
 	if err != nil {
 		return nil, err
 	}
-	files, err := edit.Apply(dir, changes, date)
+	a := &applied{baseHead: baseHead, dir: dir, cleanup: cleanup}
+	a.overlay, err = s.overlay(baseHead, ch)
 	if err == nil {
-		err = writeFiles(dir, files)
+		err = writeFiles(dir, a.overlay)
 	}
 	if err == nil {
-		err = syncAgentDefs(dir, files)
+		a.files, err = edit.Apply(dir, changes, date)
+	}
+	if err == nil {
+		err = writeFiles(dir, a.files)
+	}
+	if err == nil && a.kept() {
+		a.charters = map[string][]byte{}
+		for path, data := range a.files {
+			if id := charterID(path); id != "" {
+				a.charters[id] = data
+				delete(a.files, path)
+			}
+		}
+	}
+	if err == nil {
+		err = syncAgentDefs(dir, a.files, a.kept())
 	}
 	if err != nil {
 		cleanup()
@@ -124,7 +161,7 @@ func (s *Store) apply(baseHead string, changes []edit.Change, date string) (*app
 		}
 		return nil, &ConflictError{fmt.Sprintf("The changes don't apply to %s: %v", s.Base(), err)}
 	}
-	return &applied{baseHead: baseHead, dir: dir, files: files, cleanup: cleanup}, nil
+	return a, nil
 }
 
 // Create records a proposal of changes against the base branch as it is
@@ -150,7 +187,11 @@ func (s *Store) Create(ctx context.Context, title, description, milestone string
 		return nil, fmt.Errorf("base branch %q: %w", s.Base(), err)
 	}
 	today := s.today()
-	a, err := s.apply(baseHead, changes, today)
+	ch, err := s.charters(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.apply(baseHead, changes, today, ch)
 	if err != nil {
 		var conflict *ConflictError
 		if errors.As(err, &conflict) {
@@ -159,19 +200,23 @@ func (s *Store) Create(ctx context.Context, title, description, milestone string
 		return nil, err
 	}
 	defer a.cleanup()
-	if err := validate(a.dir); err != nil {
+	opts, err := a.specOptions()
+	if err != nil {
+		return nil, err
+	}
+	if err := validate(a.dir, opts); err != nil {
 		return nil, err
 	}
 	milestone = strings.TrimSpace(milestone)
 	if milestone != "" {
-		if sp, err := spec.Load(a.dir); err != nil || sp.Milestone(milestone) == nil {
+		if sp, err := spec.LoadWith(a.dir, opts); err != nil || sp.Milestone(milestone) == nil {
 			return nil, &InvalidError{Findings: []check.Finding{{Message: fmt.Sprintf("proposal targets unknown milestone %q", milestone)}}}
 		}
 	}
 
 	p := &store.Proposal{
 		Title: title, Description: strings.TrimSpace(description), Author: s.author(), Created: today, Status: "open",
-		Milestone: milestone, BaseCommit: baseHead, Changes: changes, Tasks: []string{},
+		Milestone: milestone, BaseCommit: baseHead, Changes: changes, Tasks: []string{}, BaseCharters: hashCharters(ch),
 	}
 	for n := 1; ; n++ {
 		p.ID = today + "-" + edit.Slug(title, 40)
@@ -189,11 +234,12 @@ func (s *Store) Create(ctx context.Context, title, description, milestone string
 	return s.detail(ctx, p.ID)
 }
 
-// syncAgentDefs regenerates the agent definitions in the materialized tree
-// dir, so a proposal that changes a charter carries the matching
-// definition, and adds them to files. A spec that doesn't load is left
-// for validate to report.
-func syncAgentDefs(dir string, files edit.Files) error {
+// syncAgentDefs regenerates the files generated from the charters in the
+// materialized tree dir, so a proposal that changes a charter carries them,
+// and adds them to files: CODEOWNERS, and the agent definitions unless
+// fausto keeps the charters (kept), and serves the definitions itself. A
+// spec that doesn't load is left for validate to report.
+func syncAgentDefs(dir string, files edit.Files, kept bool) error {
 	s, err := spec.Load(dir)
 	if err != nil {
 		return nil
@@ -201,6 +247,9 @@ func syncAgentDefs(dir string, files edit.Files) error {
 	defs, err := agentdef.Sync(dir, s)
 	if err != nil {
 		return err
+	}
+	if kept {
+		maps.DeleteFunc(defs, func(p string, _ []byte) bool { return p != agentdef.CodeOwners })
 	}
 	if err := agentdef.Write(dir, defs); err != nil {
 		return err
@@ -212,8 +261,8 @@ func syncAgentDefs(dir string, files edit.Files) error {
 }
 
 // validate runs the schema check on a materialized tree.
-func validate(dir string) error {
-	report, err := check.Run(dir, []string{"schema"})
+func validate(dir string, o spec.Options) error {
+	report, err := check.RunWith(dir, []string{"schema"}, o)
 	if err != nil {
 		return err
 	}
@@ -257,6 +306,14 @@ func (s *Store) detail(ctx context.Context, id string) (*Detail, error) {
 				return nil, err
 			}
 		}
+		// Charter changes are in no commit; the proposal keeps them.
+		d.Changes = append(d.Changes, charterChanges(p)...)
+		for _, id := range slices.Sorted(maps.Keys(p.PendingCharters)) {
+			d.Files = append(d.Files, spec.AgentFile(id))
+		}
+		if p.CharterDiff != "" {
+			d.Diff = strings.TrimSuffix(d.Diff, "\n") + "\n" + p.CharterDiff
+		}
 		for _, t := range p.PendingTasks {
 			d.Plans = append(d.Plans, TaskPlan{ID: t.ID, Agent: t.Agent, Components: nonNil(t.Components),
 				SpecChanges: []string{}, Findings: []string{}})
@@ -275,7 +332,11 @@ func (s *Store) detail(ctx context.Context, id string) (*Detail, error) {
 	if err != nil {
 		return nil, err
 	}
-	a, err := s.apply(baseHead, p.Changes, p.Created)
+	ch, err := s.charters(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.apply(baseHead, p.Changes, p.Created, ch)
 	if err != nil {
 		var conflict *ConflictError
 		if errors.As(err, &conflict) {
@@ -286,23 +347,28 @@ func (s *Store) detail(ctx context.Context, id string) (*Detail, error) {
 	}
 	defer a.cleanup()
 
-	// The diff of a dangling commit: the proposal as accepting it would
-	// commit it now. Git collects it later.
-	commit, err := s.commit(baseHead+"^{tree}", a.files, []string{baseHead}, "Preview: "+p.Title+"\n")
+	// The diff between dangling commits: the base as fausto sees it, and
+	// the proposal as accepting it would change it now, charters included.
+	// Git collects them later.
+	from, to, err := s.preview(a, p.Title)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.describeCommit(d, baseHead, commit); err != nil {
+	if err := s.describeCommit(d, from, to); err != nil {
 		return nil, err
 	}
 	if d.Conflict == "" {
-		d.Conflict = s.staleConflict(p, baseHead, d.Changes)
+		d.Conflict = s.staleConflict(p, baseHead, d.Changes, ch)
 	}
 
-	if d.Report, err = check.Run(a.dir, nil); err != nil {
+	opts, err := a.specOptions()
+	if err != nil {
 		return nil, err
 	}
-	merged, _ := spec.Load(a.dir)
+	if d.Report, err = check.RunWith(a.dir, nil, opts); err != nil {
+		return nil, err
+	}
+	merged, _ := spec.LoadWith(a.dir, opts)
 	if merged == nil {
 		if d.Conflict == "" {
 			d.Conflict = "The resulting spec cannot be loaded; see the schema check."
@@ -312,13 +378,32 @@ func (s *Store) detail(ctx context.Context, id string) (*Detail, error) {
 	if !schemaOK(d.Report) && d.Conflict == "" {
 		d.Conflict = "The resulting spec fails the schema check."
 	}
-	before, err := s.loadSpec(baseHead)
+	before, err := s.loadSpec(baseHead, ch)
 	if err != nil {
 		return nil, err
 	}
 	d.Plans, d.Unassigned = PlanTasks(id, d.Changes, before, merged, d.Report)
 	d.Unassigned = nonNil(d.Unassigned)
 	return d, nil
+}
+
+// preview returns dangling commits from which the base, as fausto sees it,
+// becomes the base with a's changes: with fausto's charters in both, when
+// it keeps them.
+func (s *Store) preview(a *applied, title string) (from, to string, err error) {
+	from = a.baseHead
+	files := a.files
+	if a.kept() {
+		if from, err = s.commit(a.baseHead+"^{tree}", a.overlay, []string{a.baseHead}, "Preview: base\n"); err != nil {
+			return "", "", err
+		}
+		files = maps.Clone(a.files)
+		for id, data := range a.charters {
+			files[spec.AgentFile(id)] = data
+		}
+	}
+	to, err = s.commit(from+"^{tree}", files, []string{from}, "Preview: "+title+"\n")
+	return from, to, err
 }
 
 // describeCommit fills d's diff, files, and spec changes from the change
@@ -337,11 +422,11 @@ func (s *Store) describeCommit(d *Detail, from, to string) error {
 		return err
 	}
 	d.Files = nonNil(strings.Fields(names))
-	before, err := s.loadSpec(from)
+	before, err := s.loadSpec(from, nil)
 	if err != nil {
 		return err
 	}
-	after, err := s.loadSpec(to)
+	after, err := s.loadSpec(to, nil)
 	if err != nil {
 		return err
 	}
@@ -352,39 +437,42 @@ func (s *Store) describeCommit(d *Detail, from, to string) error {
 }
 
 // staleConflict explains why a proposal shouldn't be accepted when an item
-// it changes was changed on the base branch since the proposal was made:
-// its edits would silently overwrite that change.
-func (s *Store) staleConflict(p *store.Proposal, baseHead string, changes []ItemChange) string {
-	if p.BaseCommit == "" || p.BaseCommit == baseHead {
-		return ""
-	}
-	if _, err := s.revParse(p.BaseCommit); err != nil {
-		return "" // the base was rewritten; nothing to compare against
-	}
-	then, err := s.loadSpec(p.BaseCommit)
-	if err != nil || then == nil {
-		return ""
-	}
-	now, err := s.loadSpec(baseHead)
-	if err != nil || now == nil {
-		return ""
-	}
+// it changes was changed since the proposal was made, on the base branch or
+// (a charter) in fausto: its edits would silently overwrite that change.
+func (s *Store) staleConflict(p *store.Proposal, baseHead string, changes []ItemChange, ch map[string][]byte) string {
 	key := func(c ItemChange) string { return c.Kind + "\x00" + c.ID }
 	mine := map[string]bool{}
 	for _, c := range changes {
 		mine[key(c)] = true
 	}
 	var clashes []string
-	for _, c := range DiffSpecs(then, now) {
-		if mine[key(c)] {
-			clashes = append(clashes, fmt.Sprintf("%s `%s`", c.Kind, c.ID))
+	if p.BaseCommit != "" && p.BaseCommit != baseHead {
+		// A rewritten base leaves nothing to compare against.
+		if _, err := s.revParse(p.BaseCommit); err == nil {
+			then, err1 := s.loadSpec(p.BaseCommit, ch)
+			now, err2 := s.loadSpec(baseHead, ch)
+			if err1 == nil && err2 == nil && then != nil && now != nil {
+				for _, c := range DiffSpecs(then, now) {
+					if mine[key(c)] {
+						clashes = append(clashes, fmt.Sprintf("%s `%s` changed on %s", c.Kind, c.ID, s.Base()))
+					}
+				}
+			}
+		}
+	}
+	if p.BaseCharters != nil {
+		now := hashCharters(ch)
+		for _, c := range changes {
+			if c.Kind == "agent" && now[c.ID] != p.BaseCharters[c.ID] {
+				clashes = append(clashes, fmt.Sprintf("agent `%s` changed in fausto", c.ID))
+			}
 		}
 	}
 	if len(clashes) == 0 {
 		return ""
 	}
 	slices.Sort(clashes)
-	return fmt.Sprintf("%s changed on %s since this proposal was made; review it and propose again.", strings.Join(clashes, ", "), s.Base())
+	return strings.Join(clashes, ", ") + " since this proposal was made; review it and propose again."
 }
 
 func schemaOK(r *check.Report) bool {
@@ -396,13 +484,15 @@ func schemaOK(r *check.Report) bool {
 	return true
 }
 
-func (s *Store) loadSpec(rev string) (*spec.Spec, error) {
+// loadSpec reads the spec at rev, with the charters fausto keeps (ch) in
+// place of the tree's own when it keeps them.
+func (s *Store) loadSpec(rev string, ch map[string][]byte) (*spec.Spec, error) {
 	dir, cleanup, err := s.materialize(rev)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
-	sp, err := spec.Load(dir)
+	sp, err := spec.LoadWith(dir, spec.Options{Charters: ch})
 	if err != nil {
 		return nil, nil // reported by the checks; diff against an empty spec
 	}
@@ -436,13 +526,33 @@ func (s *Store) Approve(ctx context.Context, id string) (*store.Proposal, error)
 	if err != nil {
 		return nil, err
 	}
-	a, err := s.apply(baseHead, d.Proposal.Changes, d.Created)
+	ch, err := s.charters(ctx)
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.apply(baseHead, d.Proposal.Changes, d.Created, ch)
 	if err != nil {
 		return nil, err
 	}
 	defer a.cleanup()
-	if err := validate(a.dir); err != nil {
+	opts, err := a.specOptions()
+	if err != nil {
 		return nil, err
+	}
+	if err := validate(a.dir, opts); err != nil {
+		return nil, err
+	}
+	var pending map[string]string
+	if len(a.charters) > 0 {
+		pending = make(map[string]string, len(a.charters))
+		for cid, data := range a.charters {
+			pending[cid] = string(data)
+		}
+		if other, err := s.pendingCharterClash(ctx, pending); err != nil {
+			return nil, err
+		} else if other != "" {
+			return nil, &ConflictError{other}
+		}
 	}
 
 	tasks := make([]store.Task, 0, len(d.Plans))
@@ -452,6 +562,30 @@ func (s *Store) Approve(ctx context.Context, id string) (*store.Proposal, error)
 			Title: d.Title, Components: p.Components, Body: taskBody(p, d),
 		})
 	}
+	charterDiff := ""
+	if pending != nil {
+		if charterDiff, err = s.charterDiff(a, d.Title); err != nil {
+			return nil, err
+		}
+	}
+	update := store.ProposalUpdate{Date: s.today(), PendingTasks: tasks, PendingCharters: pending, CharterDiff: charterDiff}
+
+	if len(a.files) == 0 {
+		// Only charters change, and nothing generated from them in the
+		// repository: there is nothing to merge, so it applies now.
+		if err := s.DB.MoveProposal(ctx, id, "open", "accepted", update); err != nil {
+			return nil, err
+		}
+		p, err := s.DB.Proposal(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if _, _, err := s.applyNow(ctx, p, ""); err != nil {
+			return nil, err
+		}
+		return s.DB.Proposal(ctx, id)
+	}
+
 	msg := fmt.Sprintf("%s\n\n%s\n\nProposal: %s\n", d.Title, d.Description, id)
 	commit, err := s.commit(baseHead+"^{tree}", a.files, []string{baseHead}, msg)
 	if err != nil {
@@ -461,13 +595,41 @@ func (s *Store) Approve(ctx context.Context, id string) (*store.Proposal, error)
 	if err != nil {
 		return nil, err
 	}
-	err = s.DB.MoveProposal(ctx, id, "open", "accepted", store.ProposalUpdate{
-		Date: s.today(), Commit: commit, Branch: review.Branch, PR: review.PR, URL: review.URL, PendingTasks: tasks,
-	})
-	if err != nil {
+	update.Commit, update.Branch, update.PR, update.URL = commit, review.Branch, review.PR, review.URL
+	if err := s.DB.MoveProposal(ctx, id, "open", "accepted", update); err != nil {
 		return nil, fmt.Errorf("the change is on branch %s but marking the proposal accepted failed: %w", review.Branch, err)
 	}
 	return s.DB.Proposal(ctx, id)
+}
+
+// pendingCharterClash says which accepted proposal, waiting for its merge,
+// already changes a charter in pending; "" if none does. Accepting both
+// would let whichever is merged last overwrite the other's charter.
+func (s *Store) pendingCharterClash(ctx context.Context, pending map[string]string) (string, error) {
+	all, err := s.DB.Proposals(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, p := range all {
+		if p.Status != "accepted" {
+			continue
+		}
+		for id := range pending {
+			if _, ok := p.PendingCharters[id]; ok {
+				return fmt.Sprintf("Agent `%s` is also changed by proposal %q, accepted and waiting for its merge; accept this one once that is applied.", id, p.Title), nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// charterDiff is the diff of a's charter changes, which are in no commit.
+func (s *Store) charterDiff(a *applied, title string) (string, error) {
+	from, to, err := s.preview(a, title)
+	if err != nil {
+		return "", err
+	}
+	return s.git("", nil, nil, "diff", "--no-color", from, to, "--", spec.Dir+"/agents/")
 }
 
 // reviewBody describes an accepted proposal in its pull request.
@@ -554,22 +716,32 @@ func (s *Store) sync(ctx context.Context, p *store.Proposal) (string, []string, 
 	}
 	switch o.State {
 	case source.Merged:
-		ids := make([]string, 0, len(p.PendingTasks))
-		tasks := make([]store.Task, 0, len(p.PendingTasks))
-		for _, t := range p.PendingTasks {
-			t.Created = s.today()
-			tasks = append(tasks, t)
-			ids = append(ids, t.ID)
-		}
-		// A sync that failed after creating the tasks left them; keep those.
-		if err := s.DB.CreateTasks(ctx, tasks); err != nil && !errors.Is(err, store.ErrExists) {
-			return "", nil, fmt.Errorf("create its tasks: %w", err)
-		}
-		return "applied", ids, s.DB.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: s.today(), Merged: o.Merged, Tasks: ids})
+		return s.applyNow(ctx, p, o.Merged)
 	case source.Closed:
 		return "withdrawn", nil, s.DB.MoveProposal(ctx, p.ID, "accepted", "withdrawn", store.ProposalUpdate{Date: s.today()})
 	}
 	return "", nil, nil
+}
+
+// applyNow applies an accepted proposal whose change is in the base branch
+// (merged by commit merged, when known), or that has nothing to merge: it
+// writes its charter changes, creates its tasks and marks it applied.
+func (s *Store) applyNow(ctx context.Context, p *store.Proposal, merged string) (string, []string, error) {
+	if err := s.putCharters(ctx, p.PendingCharters); err != nil {
+		return "", nil, fmt.Errorf("write its charters: %w", err)
+	}
+	ids := make([]string, 0, len(p.PendingTasks))
+	tasks := make([]store.Task, 0, len(p.PendingTasks))
+	for _, t := range p.PendingTasks {
+		t.Created = s.today()
+		tasks = append(tasks, t)
+		ids = append(ids, t.ID)
+	}
+	// A sync that failed after creating the tasks left them; keep those.
+	if err := s.DB.CreateTasks(ctx, tasks); err != nil && !errors.Is(err, store.ErrExists) {
+		return "", nil, fmt.Errorf("create its tasks: %w", err)
+	}
+	return "applied", ids, s.DB.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: s.today(), Merged: merged, Tasks: ids})
 }
 
 // contentMerged reports whether every spec item the proposal's commit
@@ -580,13 +752,14 @@ func (s *Store) contentMerged(p *store.Proposal) bool {
 	if err != nil || p.Commit == "" {
 		return false
 	}
-	before, err1 := s.loadSpec(p.Commit + "^")
-	mine, err2 := s.loadSpec(p.Commit)
-	base, err3 := s.loadSpec(baseHead)
+	before, err1 := s.loadSpec(p.Commit+"^", nil)
+	mine, err2 := s.loadSpec(p.Commit, nil)
+	base, err3 := s.loadSpec(baseHead, nil)
 	if err1 != nil || err2 != nil || err3 != nil || before == nil || mine == nil || base == nil {
 		return false
 	}
-	changed := DiffSpecs(before, mine)
+	// Charters fausto keeps are in no commit; leave them out.
+	changed := slices.DeleteFunc(DiffSpecs(before, mine), func(c ItemChange) bool { return c.Kind == "agent" && p.PendingCharters != nil })
 	if len(changed) == 0 {
 		return false
 	}

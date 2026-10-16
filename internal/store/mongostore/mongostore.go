@@ -34,6 +34,7 @@ var _ store.Projects = (*DB)(nil)
 type Store struct {
 	proposals *mongo.Collection
 	tasks     *mongo.Collection
+	charters  *mongo.Collection
 }
 
 var _ store.Store = (*Store)(nil)
@@ -73,7 +74,7 @@ func (d *DB) Close(ctx context.Context) error { return d.client.Disconnect(ctx) 
 // Store returns project id's proposals and tasks, creating the tasks'
 // indexes the first time.
 func (d *DB) Store(id string) store.Store {
-	s := &Store{proposals: d.db.Collection(id + ".proposals"), tasks: d.db.Collection(id + ".tasks")}
+	s := &Store{proposals: d.db.Collection(id + ".proposals"), tasks: d.db.Collection(id + ".tasks"), charters: d.db.Collection(id + ".charters")}
 	if _, done := d.indexed.Load(id); !done {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -224,6 +225,10 @@ func (s *Store) MoveProposal(ctx context.Context, id, from, to string, u store.P
 	if u.PendingTasks != nil {
 		set = append(set, bson.E{Key: "pendingTasks", Value: p.PendingTasks})
 	}
+	if u.PendingCharters != nil {
+		set = append(set, bson.E{Key: "pendingCharters", Value: p.PendingCharters})
+	}
+	add("charterDiff", p.CharterDiff)
 	return s.conditional(ctx, s.proposals, id, bson.D{{Key: "status", Value: from}}, bson.D{{Key: "$set", Value: set}})
 }
 
@@ -312,6 +317,35 @@ func (s *Store) SetTaskJira(ctx context.Context, id, key string) error {
 		return store.ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) Charters(ctx context.Context) ([]store.Charter, error) {
+	cur, err := s.charters.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	out := []store.Charter{}
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) PutCharters(ctx context.Context, put []store.Charter, del []string) error {
+	var models []mongo.WriteModel
+	t := now()
+	for _, c := range put {
+		c.Updated = t
+		models = append(models, mongo.NewReplaceOneModel().SetFilter(bson.D{{Key: "_id", Value: c.ID}}).SetReplacement(c).SetUpsert(true))
+	}
+	for _, id := range del {
+		models = append(models, mongo.NewDeleteOneModel().SetFilter(bson.D{{Key: "_id", Value: id}}))
+	}
+	if len(models) == 0 {
+		return nil
+	}
+	_, err := s.charters.BulkWrite(ctx, models)
+	return err
 }
 
 // conditional applies update to document id if it also matches cond:

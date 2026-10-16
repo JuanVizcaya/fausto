@@ -115,7 +115,12 @@ func registerProposals(mux *http.ServeMux, root string, ps *proposal.Store, js *
 			writeStoreError(w, err)
 			return
 		}
-		sp, err := spec.Load(root)
+		opts, err := ps.SpecOptions(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		sp, err := spec.LoadWith(root, opts)
 		if err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err)
 			return

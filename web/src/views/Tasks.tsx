@@ -382,7 +382,7 @@ function TaskDetail({
         (a?.kind === "human" ? (
           <p className="muted small">A person works this task by hand, then sets its status to done.</p>
         ) : (
-          <RunTask agent={t.agent} project={spec.system.name} />
+          <RunTask agent={t.agent} project={spec.system.name} kept={spec.charters === "fausto"} />
         ))
       )}
       <Markdown source={t.body} />
@@ -427,12 +427,14 @@ function SyncSummary({ report, error }: { report?: JiraReport; error?: string })
 /** How to start the agent on its tasks: its own branch and work tree of the
  * project, its tasks pulled from fausto's database, and a Claude Code session
  * with the agent definition from .claude/agents. */
-export function RunTask({ agent, project, title = "Run this task" }: { agent: string; project: string; title?: string }) {
+export function RunTask({ agent, project, kept, title = "Run this task" }: { agent: string; project: string; kept?: boolean; title?: string }) {
   const [copied, setCopied] = useState(false);
   const commands = [
     `git worktree add ../${project}-${agent} -b agent/${agent}   # once; later: git -C ../${project}-${agent} merge dev`,
     `cd ../${project}-${agent}`,
     `fausto task pull ${agent}   # writes .fausto/tasks/`,
+    // Charters kept in fausto: their definitions aren't in the repository.
+    ...(kept ? ["fausto agents   # writes .claude/agents/ from fausto's charters"] : []),
     `claude --agent ${agent} "Work your open tasks."`,
   ].join("\n");
   const copy = async () => {

@@ -4,6 +4,8 @@ package memstore
 import (
 	"context"
 	"encoding/json"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,12 +18,13 @@ type Store struct {
 	mu        sync.Mutex
 	proposals map[string]store.Proposal
 	tasks     map[string]store.Task
+	charters  map[string]store.Charter
 	Now       func() time.Time
 }
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{proposals: map[string]store.Proposal{}, tasks: map[string]store.Task{}}
+	return &Store{proposals: map[string]store.Proposal{}, tasks: map[string]store.Task{}, charters: map[string]store.Charter{}}
 }
 
 var _ store.Store = (*Store)(nil)
@@ -45,6 +48,9 @@ func cloneProposal(p store.Proposal) store.Proposal {
 	out := clone(p)
 	out.Changes = clone(p.Changes) // json:"-" on Proposal
 	out.PendingTasks = clone(p.PendingTasks)
+	out.BaseCharters = clone(p.BaseCharters)
+	out.PendingCharters = clone(p.PendingCharters)
+	out.CharterDiff = p.CharterDiff
 	return out
 }
 
@@ -169,6 +175,30 @@ func (s *Store) SetTaskJira(_ context.Context, id, key string) error {
 	}
 	t.Jira, t.Updated = key, s.now()
 	s.tasks[id] = t
+	return nil
+}
+
+func (s *Store) Charters(context.Context) ([]store.Charter, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []store.Charter{}
+	for _, c := range s.charters {
+		out = append(out, c)
+	}
+	slices.SortFunc(out, func(a, b store.Charter) int { return strings.Compare(a.ID, b.ID) })
+	return out, nil
+}
+
+func (s *Store) PutCharters(_ context.Context, put []store.Charter, del []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range put {
+		c.Updated = s.now()
+		s.charters[c.ID] = c
+	}
+	for _, id := range del {
+		delete(s.charters, id)
+	}
 	return nil
 }
 

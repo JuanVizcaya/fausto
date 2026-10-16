@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -73,8 +74,24 @@ type Proposal struct {
 	// PendingTasks are the tasks accepting it planned, created on apply.
 	Tasks        []string `json:"tasks" bson:"tasks"`
 	PendingTasks []Task   `json:"-" bson:"pendingTasks,omitempty"`
+	// For a project whose charters fausto keeps: BaseCharters are the
+	// charters' hashes, by agent id, when the proposal was made;
+	// PendingCharters are the charters accepting it changes, by agent id
+	// ("" removes one), written when it is applied; CharterDiff shows those
+	// changes, as they are in no commit.
+	BaseCharters    map[string]string `json:"-" bson:"baseCharters,omitempty"`
+	PendingCharters map[string]string `json:"-" bson:"pendingCharters,omitempty"`
+	CharterDiff     string            `json:"-" bson:"charterDiff,omitempty"`
 	// Legacy marks a proposal imported from git, whose edits weren't kept.
 	Legacy  bool      `json:"legacy,omitempty" bson:"legacy,omitempty"`
+	Updated time.Time `json:"updated" bson:"updated"`
+}
+
+// Charter is an agent's charter, kept as the YAML file it was in the
+// project (system/agents/<id>.yaml), so edits keep its comments and layout.
+type Charter struct {
+	ID      string    `json:"id" bson:"_id"`
+	YAML    string    `json:"yaml" bson:"yaml"`
 	Updated time.Time `json:"updated" bson:"updated"`
 }
 
@@ -82,14 +99,16 @@ type Proposal struct {
 // the field for the new status (Accepted, Applied or Closed); empty fields
 // leave what the proposal has.
 type ProposalUpdate struct {
-	Date         string
-	Commit       string
-	Branch       string
-	PR           int
-	URL          string
-	Merged       string
-	Tasks        []string
-	PendingTasks []Task
+	Date            string
+	Commit          string
+	Branch          string
+	PR              int
+	URL             string
+	Merged          string
+	Tasks           []string
+	PendingTasks    []Task
+	PendingCharters map[string]string
+	CharterDiff     string
 }
 
 // Apply records the move to status to with u on p.
@@ -120,6 +139,12 @@ func (u ProposalUpdate) Apply(p *Proposal, to string) {
 	}
 	if u.PendingTasks != nil {
 		p.PendingTasks = append([]Task{}, u.PendingTasks...)
+	}
+	if u.PendingCharters != nil {
+		p.PendingCharters = maps.Clone(u.PendingCharters)
+	}
+	if u.CharterDiff != "" {
+		p.CharterDiff = u.CharterDiff
 	}
 }
 
@@ -230,6 +255,13 @@ type Store interface {
 	SetTaskStatus(ctx context.Context, id, from, to, by string) error
 	// SetTaskJira records the key of the task's Jira issue.
 	SetTaskJira(ctx context.Context, id, key string) error
+
+	// Charters returns the project's agent charters, by id. None means the
+	// project keeps its charters in its repository, if anywhere.
+	Charters(ctx context.Context) ([]Charter, error)
+	// PutCharters adds or replaces put and removes the charters with ids
+	// del.
+	PutCharters(ctx context.Context, put []Charter, del []string) error
 
 	Close(ctx context.Context) error
 }

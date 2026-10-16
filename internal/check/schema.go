@@ -140,7 +140,7 @@ func checkReferences(s *spec.Spec) []Finding {
 		if !layers[c.Layer] {
 			add(c.ID, systemFile, "unknown layer %q", c.Layer)
 		}
-		if _, ok := agents[c.Owner]; !ok {
+		if _, ok := agents[c.Owner]; !ok && s.Charters != "" {
 			add(c.ID, systemFile, "owner %q is not an agent in %s/agents/", c.Owner, spec.Dir)
 		}
 		for _, t := range c.Tech {
@@ -351,7 +351,7 @@ func checkRisks(s *spec.Spec, components, decisions map[string]bool) []Finding {
 		requirements[r.ID] = true
 	}
 	for _, r := range s.Risks.Risks {
-		if !agents[r.Owner] {
+		if !agents[r.Owner] && s.Charters != "" {
 			add("risk %q is owned by unknown agent %q", r.ID, r.Owner)
 		}
 		for _, id := range r.Components {

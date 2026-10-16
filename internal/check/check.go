@@ -64,18 +64,22 @@ type Check struct {
 	Name        string
 	Description string
 	Run         func(*Repo) []Finding
+	// NeedsCharters marks a check about ownership, skipped when the agent
+	// charters are unknown: kept in fausto, and fausto isn't at hand (as
+	// in CI).
+	NeedsCharters bool
 }
 
 // All lists every check in the order they run.
 var All = []Check{
-	{"schema", "Spec files match their schemas and every reference resolves.", checkSchema},
-	{"services", "Declared services match their commands and the Compose file.", checkServices},
-	{"layers", "Go imports follow declared dependencies and layers.", checkLayers},
-	{"db-ownership", "Each database is used by exactly one declared owner.", checkDBOwnership},
-	{"contracts", "Declared protobuf contracts exist, are versioned, and are generated.", checkContracts},
-	{"ownership", "Every file has one owning agent, matching its component's owner.", checkOwnership},
-	{"runtime", "Compose services meet the runtime rules their requirements ask for.", checkRuntime},
-	{"agents", "Files generated from the agent charters, the Claude Code agent definitions in .claude/agents and .github/CODEOWNERS, match the charters.", checkAgents},
+	{"schema", "Spec files match their schemas and every reference resolves.", checkSchema, false},
+	{"services", "Declared services match their commands and the Compose file.", checkServices, false},
+	{"layers", "Go imports follow declared dependencies and layers.", checkLayers, false},
+	{"db-ownership", "Each database is used by exactly one declared owner.", checkDBOwnership, false},
+	{"contracts", "Declared protobuf contracts exist, are versioned, and are generated.", checkContracts, false},
+	{"ownership", "Every file has one owning agent, matching its component's owner.", checkOwnership, true},
+	{"runtime", "Compose services meet the runtime rules their requirements ask for.", checkRuntime, false},
+	{"agents", "Files generated from the agent charters (.github/CODEOWNERS, and the Claude Code agent definitions in .claude/agents for charters kept in the repository) match the charters.", checkAgents, true},
 }
 
 // knownChecks is the list of check names, kept separate from All so the
@@ -93,7 +97,10 @@ func Names() []string {
 
 // Run loads the spec under root and runs the named checks, or all checks if
 // names is empty.
-func Run(root string, names []string) (*Report, error) {
+func Run(root string, names []string) (*Report, error) { return RunWith(root, names, spec.Options{}) }
+
+// RunWith is Run with the spec read with o.
+func RunWith(root string, names []string, o spec.Options) (*Report, error) {
 	for _, n := range names {
 		if !slices.Contains(Names(), n) {
 			return nil, fmt.Errorf("unknown check %q (available: %s)", n, strings.Join(Names(), ", "))
@@ -103,7 +110,7 @@ func Run(root string, names []string) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	s, loadErr := spec.Load(root)
+	s, loadErr := spec.LoadWith(root, o)
 	repo := &Repo{Root: root, Spec: s, Files: files}
 	return run(repo, loadErr, names), nil
 }
@@ -131,7 +138,7 @@ func run(repo *Repo, loadErr error, names []string) *Report {
 			for _, e := range splitErrors(loadErr) {
 				r.Findings = append(r.Findings, Finding{Message: e})
 			}
-		case loadErr != nil:
+		case loadErr != nil, c.NeedsCharters && repo.Spec.Charters == "":
 			r.Status = Skipped
 		default:
 			r.Findings = append(r.Findings, c.Run(repo)...)

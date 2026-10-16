@@ -235,13 +235,40 @@ Changes to the spec go through proposals, kept in the database:
 
 The proposal commit uses git's identity unless you pass `-author "Name <email>"`.
 
+## Agent charters
+
+An agent charter says what an agent (or a person) is for, which paths it
+owns, the rules it follows and who reviews its work. A project starts with
+its charters in its repository (`system/agents/<id>.yaml`). Fausto can keep
+them instead, so they stop being part of the project:
+
+```sh
+fausto charters import          # in the project's clone: copy system/agents/ into fausto
+fausto charters list
+fausto charters export          # write fausto's charters back to system/agents/
+```
+
+Once fausto keeps them it reads only its own; the files in `system/agents/`
+can be removed from the repository. Charters are still edited through
+proposals, and a charter change is in no commit: it is written to fausto
+when the proposal is applied, right away when nothing else in the proposal
+needs merging. Two proposals waiting for their merge can't change the same
+charter, and a charter changed after a proposal was made makes it stale.
+
+Where fausto isn't at hand, as in CI, ownership is unknown: `fausto check`
+skips the `ownership` and `agents` checks and doesn't check that owners are
+charters. With `FAUSTO_MONGO_URI` set, `fausto check` and `fausto agents`
+use the charters fausto keeps.
+
 ## Running agents
 
-Each agent charter in `system/agents/` of kind `agent` has a generated
-Claude Code agent definition in `.claude/agents/<id>.md`: its scope, owned
-paths and components, rules, the principles, and how to work its tasks.
-Proposals regenerate them when charters change; `fausto agents` does it by
-hand, and the `agents` check fails when they are stale. Don't edit them.
+Each agent charter of kind `agent` has a generated Claude Code agent
+definition in `.claude/agents/<id>.md`: its scope, owned paths and
+components, rules, the principles, and how to work its tasks. For charters
+in the repository, proposals regenerate them when charters change, and the
+`agents` check fails when they are stale; don't edit them. For charters
+fausto keeps, the definitions aren't part of the project: `fausto agents`
+writes them to `.claude/agents/` where you run the agent.
 
 To work an agent's open tasks, give it its own branch and work tree, pull
 its tasks, start it, then review and merge (the Tasks tab shows these
@@ -251,6 +278,7 @@ commands per task). The agent needs `FAUSTO_MONGO_URI` in its environment:
 git worktree add ../myproject-residents -b agent/residents
 cd ../myproject-residents
 fausto task pull residents
+fausto agents                   # when fausto keeps the charters
 claude --agent residents "Work your open tasks."
 # back in your checkout:
 git diff dev...agent/residents && git merge agent/residents
