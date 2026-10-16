@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "events.schema.json",
+  "title": "Event contracts",
+  "type": "object",
+  "required": ["events"],
+  "additionalProperties": false,
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "description", "status", "producer", "message"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$", "description": "<domain>.<event>, such as residents.resident-registered."},
+          "title": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1, "description": "What happened, and what consumers use it for."},
+          "status": {"enum": ["planned", "active", "deprecated"]},
+          "producer": {"type": "string", "description": "The only component that publishes it."},
+          "consumers": {"type": "array", "items": {"type": "string"}},
+          "message": {
+            "type": "string",
+            "pattern": "^habyta(\\.[a-z][a-z0-9_]*)+\\.v[0-9]+\\.[A-Z][A-Za-z0-9]*$",
+            "description": "Fully qualified protobuf message in a versioned package: habyta.residents.events.v1.ResidentRegistered."
+          },
+          "key": {"type": "string", "description": "Field that orders and partitions messages, such as tenant_id."},
+          "delivery": {"enum": ["at-least-once", "at-most-once"], "description": "Consumers of at-least-once events must be idempotent."}
+        }
+      }
+    }
+  }
+}

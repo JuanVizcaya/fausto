@@ -1,0 +1,7 @@
+id: tooling
+name: Tooling agent
+kind: agent
+scope: The fausto supervising tool and CI workflows.
+owns:
+  - fausto/
+  - .github/

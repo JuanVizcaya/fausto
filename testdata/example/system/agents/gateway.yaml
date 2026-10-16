@@ -1,0 +1,10 @@
+id: gateway
+name: Gateway agent
+kind: agent
+scope: Public HTTP/JSON API and, later, the React web app.
+owns:
+  - backend/cmd/api/
+  - backend/internal/api/
+rules:
+  - Hand-write browser JSON types; never expose generated protobuf types directly.
+  - 'Every error response uses {"error": {"code", "message", "requestId"}}.'

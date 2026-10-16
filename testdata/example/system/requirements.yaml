@@ -1,0 +1,69 @@
+# Non-functional requirements. verified_by names the fausto check or
+# runtime rule that enforces a requirement on every active component it
+# applies to; requirements without it are reviewed by hand.
+#
+# Runtime rules check each component's compose.yaml service:
+#   healthcheck   a health check is defined and enabled
+#   memory-limit  deploy.resources.limits.memory is set
+#   hardening     read-only root filesystem, cap_drop ALL, no-new-privileges
+#   exposure      only edge components publish ports
+requirements:
+  - id: health-checks
+    title: Every running component reports its health
+    category: operability
+    statement: Each service and database has a health check, so Compose and orchestrators only route to healthy instances.
+    applies_to: {kinds: [service, gateway, database]}
+    verified_by: runtime/healthcheck
+
+  - id: resource-limits
+    title: Memory is bounded
+    category: operability
+    statement: Every container has a memory limit, so one runaway service cannot starve the others.
+    applies_to: {kinds: [service, gateway, database]}
+    verified_by: runtime/memory-limit
+
+  - id: least-privilege
+    title: Services run with least privilege
+    category: security
+    statement: Service containers have a read-only root filesystem, drop all Linux capabilities, and cannot gain new privileges.
+    applies_to: {kinds: [service, gateway]}
+    verified_by: runtime/hardening
+
+  - id: internal-only
+    title: Only the edge is reachable from outside
+    category: security
+    statement: Domain services and databases publish no ports; clients reach the system only through edge components.
+    verified_by: runtime/exposure
+
+  - id: tenant-isolation
+    title: Every query is scoped to a tenant
+    category: security
+    statement: Domain services take the tenant from every request and never return or change another tenant's data.
+    applies_to: {layers: [domain]}
+
+  - id: graceful-shutdown
+    title: Shutdown drains in-flight requests
+    category: availability
+    statement: On SIGTERM a service stops accepting work and finishes in-flight requests before exiting.
+    target: drains within 10 s
+    applies_to: {kinds: [service, gateway]}
+
+  - id: api-latency
+    title: The public API is fast
+    category: performance
+    statement: Read endpoints of the public API respond quickly under normal load.
+    target: p99 < 300 ms for reads
+    applies_to: {components: [api]}
+
+  - id: backups
+    title: Data survives the loss of a database
+    category: durability
+    statement: Each database is backed up and restores are tested.
+    target: RPO 24 h, RTO 4 h
+    applies_to: {kinds: [database]}
+
+  - id: pii-declared
+    title: Personal data is declared
+    category: privacy
+    statement: Every table that stores personal data lists those fields under data.pii in system.yaml.
+    applies_to: {kinds: [service]}

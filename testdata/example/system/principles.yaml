@@ -1,0 +1,37 @@
+# Implementation principles every agent follows. `checks` names the
+# `fausto check` checks that enforce a principle; principles without checks
+# are reviewed by hand.
+principles:
+  - id: service-owns-data
+    title: Each service owns its database
+    rationale: Services never read another service's tables, so each can change its schema and storage independently.
+    checks: [db-ownership]
+  - id: declared-architecture
+    title: Code matches the declared architecture
+    rationale: system/ is the source of truth; every service, contract, and dependency is declared there before it is built.
+    checks: [schema, services, contracts]
+  - id: layered-dependencies
+    title: Dependencies follow the layers
+    rationale: Edge calls domain, domain calls data, and everything may use platform. Domain services never import each other's code; they talk over gRPC contracts.
+    checks: [layers]
+  - id: versioned-contracts
+    title: Contracts are versioned and never broken
+    rationale: Never change the meaning of an existing protobuf field number; breaking changes go in a new v2 package.
+    checks: [contracts]
+  - id: storage-behind-interfaces
+    title: Persistence sits behind store interfaces
+    rationale: Changing databases only means adding another store implementation (ADR 0001).
+  - id: gateway-owns-public-api
+    title: The gateway owns the public API
+    rationale: Browser JSON types are hand-written in the gateway so the public API can evolve independently of internal contracts.
+  - id: request-ids
+    title: Every request carries a request ID
+    rationale: X-Request-ID is forwarded as x-request-id gRPC metadata and logged by every service, so one request can be traced across services.
+  - id: clear-ownership
+    title: Every file has exactly one owning agent
+    rationale: Agents work in parallel without stepping on each other; changes outside an agent's paths need the owner's review.
+    checks: [ownership, agents]
+  - id: secure-runtime
+    title: Services run hardened and bounded
+    rationale: Containers have health checks, memory limits, least privilege, and no public ports unless they are the edge, as required in requirements.yaml.
+    checks: [runtime]

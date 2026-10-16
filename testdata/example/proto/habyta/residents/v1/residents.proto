@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package habyta.residents.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// ResidentService owns the people who live in or are linked to units.
+// Every RPC is scoped to a tenant (a management company or complex).
+service ResidentService {
+  rpc CreateResident(CreateResidentRequest) returns (CreateResidentResponse);
+  rpc GetResident(GetResidentRequest) returns (GetResidentResponse);
+  rpc ListResidents(ListResidentsRequest) returns (ListResidentsResponse);
+}
+
+message Resident {
+  string id = 1;
+  string tenant_id = 2;
+  string unit_id = 3;
+  string full_name = 4;
+  string email = 5;
+  string phone = 6;
+  // Keycloak user ID; empty until the resident accepts an invitation.
+  string keycloak_sub = 7;
+  google.protobuf.Timestamp create_time = 8;
+  google.protobuf.Timestamp update_time = 9;
+}
+
+message CreateResidentRequest {
+  string tenant_id = 1;
+  string unit_id = 2;
+  string full_name = 3;
+  string email = 4;
+  string phone = 5;
+  string keycloak_sub = 6;
+}
+
+message CreateResidentResponse {
+  Resident resident = 1;
+}
+
+message GetResidentRequest {
+  string tenant_id = 1;
+  string id = 2;
+}
+
+message GetResidentResponse {
+  Resident resident = 1;
+}
+
+message ListResidentsRequest {
+  string tenant_id = 1;
+  // Optional filter.
+  string unit_id = 2;
+  // Defaults to 50; values above 200 are reduced to 200.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListResidentsResponse {
+  repeated Resident residents = 1;
+  // Empty when there are no more results.
+  string next_page_token = 2;
+}

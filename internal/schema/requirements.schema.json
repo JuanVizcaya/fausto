@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "requirements.schema.json",
+  "title": "Non-functional requirements",
+  "type": "object",
+  "required": ["requirements"],
+  "additionalProperties": false,
+  "properties": {
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "category", "statement"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "title": {"type": "string", "minLength": 1},
+          "category": {"enum": ["availability", "performance", "security", "privacy", "operability", "durability"]},
+          "statement": {"type": "string", "minLength": 1, "description": "What must be true, in one or two sentences."},
+          "target": {"type": "string", "description": "Measurable target, such as \"p99 < 300 ms\" or \"99.5% monthly\"."},
+          "applies_to": {
+            "type": "object",
+            "description": "Components it applies to, by kind, layer, or id. Empty applies to every component.",
+            "additionalProperties": false,
+            "properties": {
+              "kinds": {"type": "array", "items": {"enum": ["service", "gateway", "database", "frontend", "library"]}},
+              "layers": {"type": "array", "items": {"type": "string"}},
+              "components": {"type": "array", "items": {"type": "string"}}
+            }
+          },
+          "verified_by": {
+            "type": "string",
+            "pattern": "^[a-z-]+(/[a-z-]+)?$",
+            "description": "A fausto check (layers) or runtime rule (runtime/healthcheck). Empty means reviewed by hand."
+          }
+        }
+      }
+    }
+  }
+}

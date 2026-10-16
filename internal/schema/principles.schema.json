@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "principles.schema.json",
+  "title": "Implementation principles",
+  "type": "object",
+  "required": ["principles"],
+  "additionalProperties": false,
+  "properties": {
+    "principles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "rationale"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "title": {"type": "string"},
+          "rationale": {"type": "string"},
+          "checks": {
+            "type": "array",
+            "items": {"enum": ["schema", "services", "layers", "db-ownership", "contracts", "ownership", "runtime", "agents"]}
+          }
+        }
+      }
+    }
+  }
+}

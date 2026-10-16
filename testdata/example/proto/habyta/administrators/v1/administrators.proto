@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package habyta.administrators.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// AdministratorService owns the administrators who manage apartment
+// complexes on behalf of a tenant (a management company or complex).
+// Every RPC is scoped to a tenant.
+service AdministratorService {
+  rpc CreateAdministrator(CreateAdministratorRequest) returns (CreateAdministratorResponse);
+  rpc GetAdministrator(GetAdministratorRequest) returns (GetAdministratorResponse);
+  rpc ListAdministrators(ListAdministratorsRequest) returns (ListAdministratorsResponse);
+}
+
+message Administrator {
+  string id = 1;
+  string tenant_id = 2;
+  // Name of the administrator: the administration company, or the person
+  // when they work on their own.
+  string company = 3;
+  string email = 4;
+  string phone = 5;
+  // Keycloak user ID; empty until the administrator accepts an invitation.
+  string keycloak_sub = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp update_time = 8;
+}
+
+message CreateAdministratorRequest {
+  string tenant_id = 1;
+  string company = 2;
+  string email = 3;
+  string phone = 4;
+  string keycloak_sub = 5;
+}
+
+message CreateAdministratorResponse {
+  Administrator administrator = 1;
+}
+
+message GetAdministratorRequest {
+  string tenant_id = 1;
+  string id = 2;
+}
+
+message GetAdministratorResponse {
+  Administrator administrator = 1;
+}
+
+message ListAdministratorsRequest {
+  string tenant_id = 1;
+  // Defaults to 50; values above 200 are reduced to 200.
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListAdministratorsResponse {
+  repeated Administrator administrators = 1;
+  // Empty when there are no more results.
+  string next_page_token = 2;
+}

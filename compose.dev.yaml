@@ -1,0 +1,9 @@
+# Development override: publishes the database on localhost so fausto can
+# run from source (go run ./cmd/fausto serve) with
+#   FAUSTO_MONGO_URI=mongodb://fausto:<FAUSTO_MONGO_PASSWORD>@localhost:27017/?authSource=admin
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d mongo
+services:
+  mongo:
+    ports:
+      - "127.0.0.1:${FAUSTO_MONGO_PORT:-27017}:27017"

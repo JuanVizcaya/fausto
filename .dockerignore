@@ -1,0 +1,7 @@
+web
+
+Dockerfile
+.dockerignore
+.git
+.env
+testdata

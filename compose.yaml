@@ -1,0 +1,87 @@
+# Fausto and its database, deployed together. MongoDB holds fausto's
+# workflow state (proposals, tasks) and is reachable only by fausto, on
+# this compose network.
+#
+#   cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD and FAUSTO_PROJECT_DIR
+#   docker compose up -d --build    # http://127.0.0.1:7070
+#
+# For developing fausto itself, run only the database, published on
+# localhost, and fausto from source:
+#
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d mongo
+#   go run ./cmd/fausto serve -root ../your-project
+name: fausto
+
+services:
+  fausto:
+    build: .
+    image: ghcr.io/juanvizcaya/fausto:${FAUSTO_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FAUSTO_PORT:-7070}:7070"
+    environment:
+      FAUSTO_MONGO_URI: mongodb://fausto:${FAUSTO_MONGO_PASSWORD:?set FAUSTO_MONGO_PASSWORD in .env}@mongo:27017/?authSource=admin
+      FAUSTO_MONGO_DB: ${FAUSTO_MONGO_DB:-}
+      FAUSTO_AUTHOR: ${FAUSTO_AUTHOR:-}
+      FAUSTO_BASE: ${FAUSTO_BASE:-}
+      FAUSTO_REPO: ${FAUSTO_REPO:-}
+      FAUSTO_JIRA_URL: ${FAUSTO_JIRA_URL:-}
+      FAUSTO_JIRA_EMAIL: ${FAUSTO_JIRA_EMAIL:-}
+      FAUSTO_JIRA_TOKEN: ${FAUSTO_JIRA_TOKEN:-}
+      FAUSTO_JIRA_PROJECT: ${FAUSTO_JIRA_PROJECT:-}
+      FAUSTO_JIRA_ISSUE_TYPE: ${FAUSTO_JIRA_ISSUE_TYPE:-}
+      FAUSTO_JIRA_STATUSES: ${FAUSTO_JIRA_STATUSES:-}
+    # Files fausto writes in the project belong to you.
+    user: "${FAUSTO_UID:-1000}:${FAUSTO_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      # The project fausto works on: a local clone.
+      - ${FAUSTO_PROJECT_DIR:?set FAUSTO_PROJECT_DIR in .env}:/repo
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  mongo:
+    # 8.2.12: earlier 8.x and the current latest refuse Linux kernels >= 6.19
+    # (SERVER-121912), which Docker Desktop now ships.
+    image: mongo:8.2.12
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: fausto
+      MONGO_INITDB_ROOT_PASSWORD: ${FAUSTO_MONGO_PASSWORD:?set FAUSTO_MONGO_PASSWORD in .env}
+    # No published port: only fausto reaches it. compose.dev.yaml publishes
+    # it on localhost for development.
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mongo-data:

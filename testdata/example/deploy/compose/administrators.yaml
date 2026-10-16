@@ -1,0 +1,81 @@
+# Compose services of the administrators component, owned by the
+# administrators agent and included from compose.yaml. Paths here are
+# relative to this file, e.g. context: ../../backend.
+#
+# YAML anchors from compose.yaml do not reach this file, so the hardening
+# the residents services get from x-go-service is spelled out here.
+services:
+  administrators:
+    build:
+      context: ../../backend
+      args:
+        SERVICE: administrators
+    # Internal only: gRPC on 9090 for other services; HTTP 8080 serves probes.
+    expose:
+      - "9090"
+    environment:
+      HTTP_ADDR: ":8080"
+      GRPC_ADDR: ":9090"
+      SHUTDOWN_TIMEOUT: "10s" # keep below stop_grace_period
+      DATABASE_URL: "postgres://administrators:${ADMINISTRATORS_DB_PASSWORD:-administrators}@administrators-db:5432/administrators?sslmode=disable&pool_max_conns=10"
+    depends_on:
+      administrators-db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,uid=65532,gid=65532,mode=0700
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "/service", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+  # Each service owns its database; only administrators connects to this one.
+  administrators-db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: administrators
+      POSTGRES_USER: administrators
+      POSTGRES_PASSWORD: ${ADMINISTRATORS_DB_PASSWORD:-administrators}
+    volumes:
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/.
+      - administrators-db:/var/lib/postgresql
+      - ../postgres/administrators-init.sql:/docker-entrypoint-initdb.d/administrators-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U administrators -d administrators"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Runs the administrators Go tests, including Postgres integration tests:
+  #   docker compose --profile test run --rm --build administrators-test
+  administrators-test:
+    profiles: ["test"]
+    build:
+      context: ../../backend
+      target: development
+    command: ["sh", "-c", "go vet ./internal/administrators/... && go test -race -count=1 ./internal/administrators/..."]
+    environment:
+      ADMINISTRATORS_TEST_DATABASE_URL: "postgres://administrators:${ADMINISTRATORS_DB_PASSWORD:-administrators}@administrators-db:5432/administrators_test?sslmode=disable"
+    depends_on:
+      administrators-db:
+        condition: service_healthy
+
+volumes:
+  administrators-db:

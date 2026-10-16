@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="14 -2 132 132" role="img" aria-label="Fausto">
+  <defs>
+    <mask id="face">
+      <rect x="0" y="-10" width="160" height="150" fill="#fff"/>
+      <path d="M50,74 L72,82 A12,12 0 0 1 50,74 Z" fill="#000"/>
+      <path d="M110,74 L88,82 A12,12 0 0 0 110,74 Z" fill="#000"/>
+      <polygon points="75,96 85,96 80,102" fill="#000"/>
+    </mask>
+  </defs>
+  <polygon points="36,56 26,14 64,40 80,37 96,40 134,14 124,56 138,88 110,116 50,116 22,88" fill="#FBF9F4" stroke="#FBF9F4" stroke-width="8" stroke-linejoin="round" mask="url(#face)"/>
+</svg>

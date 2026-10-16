@@ -1,0 +1,27 @@
+# Bounded contexts and shared vocabulary.
+domains:
+  - id: residents
+    name: Residents
+    description: People who live in or are linked to units.
+    components: [residents, residents-db]
+    status: active
+  - id: properties
+    name: Properties
+    description: Complexes, buildings, and units.
+    status: planned
+  - id: billing
+    name: Billing
+    description: Fees, invoices, and payments.
+    status: planned
+  - id: maintenance
+    name: Maintenance
+    description: Requests, work orders, and vendors.
+    status: planned
+
+glossary:
+  - term: Tenant
+    definition: A management company or complex that uses Habyta. Every record is scoped to one tenant.
+  - term: Unit
+    definition: An apartment or other space within a complex.
+  - term: Resident
+    definition: A person who lives in or is linked to a unit.

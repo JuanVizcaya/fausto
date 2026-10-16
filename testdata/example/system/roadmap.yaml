@@ -1,0 +1,68 @@
+# Milestones in roadmap order. A milestone is done when every exit
+# criterion is met and its components are no longer planned.
+milestones:
+  - id: residents-mvp
+    title: Residents MVP
+    goal: Managers can register residents, look them up, and list them per unit through the public API.
+    status: in-progress
+    components: [residents, residents-db, api]
+    decisions: ["0001", "0002"]
+    exit_criteria:
+      - text: Residents gRPC service with create, get, and list
+        done: true
+      - text: Postgres storage with migrations and readiness checks
+        done: true
+      - text: Public HTTP endpoints for residents in the gateway
+        done: true
+      - text: Update and remove residents
+
+  - id: public-api-v1
+    title: Public API v1
+    goal: The gateway is safe to expose to the web app and partners.
+    status: planned
+    depends_on: [residents-mvp]
+    components: [api]
+    exit_criteria:
+      - text: Requests are authenticated with Keycloak tokens
+      - text: The tenant comes from the token, never from the client alone
+      - text: The error model and endpoints are documented
+
+  - id: properties-mvp
+    title: Properties MVP
+    goal: Complexes, buildings, and units are managed by a properties service that other services can rely on.
+    status: planned
+    exit_criteria:
+      - text: Properties service declared in system/ with contract proto/habyta/properties/v1
+      - text: Complexes, buildings, and units can be created and listed per tenant
+      - text: Public HTTP endpoints for properties in the gateway
+      - text: Residents validate unit ids against the properties service
+
+  - id: billing-mvp
+    title: Billing MVP
+    goal: Managers can invoice residents for monthly fees.
+    status: planned
+    depends_on: [properties-mvp, residents-mvp]
+    components: [api]
+    exit_criteria:
+      - text: Billing service declared in system/ with contract proto/habyta/billing/v1
+      - text: Monthly fees per unit generate invoices for its residents
+      - text: Public HTTP endpoints for invoices in the gateway
+
+  - id: maintenance-mvp
+    title: Maintenance MVP
+    goal: Residents can report problems and managers can track them to completion.
+    status: planned
+    depends_on: [properties-mvp]
+    exit_criteria:
+      - text: Maintenance service declared in system/ with contract proto/habyta/maintenance/v1
+      - text: Requests move through open, in progress, and resolved
+
+  - id: web-app-v1
+    title: Web app v1
+    goal: Managers do their daily work in the browser instead of through the API.
+    status: planned
+    depends_on: [public-api-v1]
+    components: [web]
+    exit_criteria:
+      - text: Managers sign in with Keycloak
+      - text: Residents and units can be managed from the UI

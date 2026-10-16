@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task.schema.json",
+  "title": "Agent task (front matter)",
+  "type": "object",
+  "required": ["id", "agent", "status", "created", "title"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "agent": {"type": "string"},
+    "proposal": {"type": "string"},
+    "milestone": {"type": "string"},
+    "status": {"enum": ["open", "in-progress", "done", "dropped"]},
+    "created": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "title": {"type": "string", "minLength": 1},
+    "components": {"type": "array", "items": {"type": "string"}},
+    "jira": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*-[0-9]+$"}
+  }
+}

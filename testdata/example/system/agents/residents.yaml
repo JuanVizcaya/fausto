@@ -1,0 +1,13 @@
+id: residents
+name: Residents agent
+kind: agent
+scope: Residents domain service, its gRPC contract, and its database.
+owns:
+  - backend/cmd/residents/
+  - backend/internal/residents/
+  - backend/gen/habyta/residents/
+  - proto/habyta/residents/
+  - deploy/postgres/residents-init.sql
+rules:
+  - Add schema changes as new numbered migrations; never edit an applied one.
+  - Regenerate backend/gen with every proto change.

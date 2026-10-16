@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "system.schema.json",
+  "title": "System model",
+  "type": "object",
+  "required": ["name", "layers", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {"type": "string"},
+    "description": {"type": "string"},
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "may_depend_on"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "description": {"type": "string"},
+          "may_depend_on": {"type": "array", "items": {"$ref": "#/$defs/id"}}
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "kind", "layer", "status", "owner"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"$ref": "#/$defs/id"},
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "kind": {"enum": ["service", "gateway", "database", "frontend", "library"]},
+          "layer": {"$ref": "#/$defs/id"},
+          "status": {"enum": ["planned", "active", "deprecated"]},
+          "owner": {"$ref": "#/$defs/id", "description": "Agent id from system/agents/."},
+          "tech": {"type": "array", "items": {"$ref": "#/$defs/id"}},
+          "paths": {
+            "type": "array",
+            "description": "Repository directories that hold this component's code.",
+            "items": {"type": "string"}
+          },
+          "runtime": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "cmd": {"type": "string", "description": "Directory of the Go main package."},
+              "compose": {"type": "string", "description": "Service name in compose.yaml."}
+            }
+          },
+          "contracts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["proto"],
+              "additionalProperties": false,
+              "properties": {
+                "proto": {"type": "string", "pattern": "^proto/.+/v[0-9]+$"},
+                "generated": {"type": "string"}
+              }
+            }
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["table"],
+              "additionalProperties": false,
+              "properties": {
+                "table": {"type": "string"},
+                "pii": {"type": "array", "items": {"type": "string"}}
+              }
+            }
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["target", "protocol"],
+              "additionalProperties": false,
+              "properties": {
+                "target": {"$ref": "#/$defs/id"},
+                "protocol": {"enum": ["http", "grpc", "sql", "library"], "description": "Events are declared in events.yaml, not as dependencies."},
+                "description": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}
+  }
+}

@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      # For the MongoDB store tests (FAUSTO_TEST_MONGO_URI).
+      mongo:
+        image: mongo:8.2.12
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Check the embedded web UI is up to date
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+          git diff --exit-code -- ../internal/server/dist || {
+            echo "::error::internal/server/dist is stale; run npm run build in web and commit it"
+            exit 1
+          }
+          test -z "$(git status --porcelain -- ../internal/server/dist)"
+      - name: Test
+        env:
+          FAUSTO_TEST_MONGO_URI: mongodb://localhost:27017
+        run: go vet ./... && go test ./...
+      - name: Build the image
+        run: docker build -q -t fausto .

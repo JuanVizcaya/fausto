@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+backend/bin/
+backend/coverage.out
+fausto/web/node_modules/
+/.idea/
+.fausto/
