@@ -21,6 +21,8 @@ export const statusTone: Record<string, Tone> = {
   proposed: "info",
   superseded: "muted",
   rejected: "bad",
+  applied: "good",
+  withdrawn: "muted",
   manual: "muted",
   open: "info",
   "in-progress": "warn",

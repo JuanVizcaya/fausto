@@ -44,6 +44,16 @@ Checks: `schema`, `services`, `layers`, `db-ownership`, `contracts`,
 `ownership`, and `runtime`, which enforces the Compose rules (health checks,
 memory limits, hardening, exposure) that `system/requirements.yaml` asks for.
 
+The checks expect Go commands in `backend/cmd/<name>`, the Compose file at
+`compose.yaml` and protobuf packages under `proto/`. A project laid out
+differently says so in an optional `.fausto.yaml` at its root:
+
+```yaml
+commands_dir: cmd
+compose_file: deploy/compose.yaml
+proto_root: api/proto
+```
+
 ## `fausto serve`
 
 Opens fausto at http://127.0.0.1:7070: architecture and layer diagrams, the
@@ -57,12 +67,14 @@ every refresh.
 Agents set their own tasks' status with `fausto task`. A person sets the
 status of a task assigned to a `kind: human` charter in the Tasks tab.
 
-To run fausto and its database in Docker against a clone of your project
-(no Go install needed), from this repository:
+To run fausto and its database in Docker (no Go install needed), from this
+repository:
 
 ```sh
-cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD, FAUSTO_PROJECT_DIR, FAUSTO_AUTHOR (and FAUSTO_UID/GID on Linux)
+cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD, FAUSTO_AUTHOR (and FAUSTO_UID/GID on Linux)
 docker compose up -d --build    # http://127.0.0.1:7070
+docker compose exec fausto fausto project add habyta -path /projects/habyta    # see Projects
+docker compose restart fausto
 ```
 
 Fausto only listens on localhost and has no login. Without the database, or
@@ -86,13 +98,40 @@ followed through interfaces to their implementations, with its source. Fausto
 reads the code with `go/parser`, without compiling, so relations and calls
 are matched by name and shape and are a guide, not a proof.
 
+## Projects
+
+Fausto works on any number of projects, each a git repository with a
+`system/` spec, and works on each only through its repository: nothing in
+a project depends on fausto, and removing fausto leaves it as it was.
+Register them once:
+
+```sh
+fausto project add habyta -path ../habyta           # a local clone
+fausto project add habyta -github owner/habyta      # a repository on GitHub
+fausto project list
+fausto project rm habyta                            # keeps its proposals and tasks
+```
+
+`fausto serve` serves every registered project, with a picker in the top
+bar; `fausto serve -root <clone>` serves just that clone, registered or not.
+Commands that work on one project (`fausto task`, `fausto jira sync`) take
+`-project`, or work it out from the clone they run in.
+
+For a local clone, accepting a proposal creates a branch in the clone. For
+GitHub, fausto keeps its own clone (in `FAUSTO_DATA`, by default the user
+cache directory), pushes the branch and opens a pull request; it needs
+`FAUSTO_GITHUB_TOKEN`, a fine-grained token with read and write access to
+the repository's contents and pull requests. The token is only read from the
+environment and is never written to the clone or logged.
+
 ## Storage
 
-The project's git holds only the spec and the code. Proposals and the tasks
-they create live in fausto's own MongoDB database, deployed with fausto by
-`compose.yaml` and reachable only by it, so creating a proposal or a task,
-or changing a task's status, makes no commit. Accepting a proposal makes
-exactly one: the spec change itself.
+A project's git holds only its spec and code. Projects, proposals and the
+tasks they create live in fausto's own MongoDB database, deployed with
+fausto by `compose.yaml` and reachable only by it; each project's proposals
+and tasks are in collections of their own (`<project>.proposals`,
+`<project>.tasks`). Creating a proposal or a task, or changing a task's
+status, touches no repository.
 
 To develop fausto, run only the database, published on localhost, and fausto
 from source:
@@ -103,9 +142,12 @@ export FAUSTO_MONGO_URI='mongodb://fausto:<FAUSTO_MONGO_PASSWORD>@localhost:2701
 go run ./cmd/fausto serve -root ../your-project
 ```
 
+A database from before projects keeps its proposals and tasks in
+`proposals` and `tasks`; `fausto project add <id> ... -adopt` gives them to
+that project.
+
 `fausto check` and `fausto agents` don't need the database, so CI doesn't
 either. The connection string is read only from the environment.
-
 ## Tasks
 
 An agent works from its tasks as Markdown files:
@@ -121,11 +163,6 @@ fausto task list -agent residents -status open,in-progress
 Each status change records who made it (`FAUSTO_AUTHOR`, else git's
 identity), and the Tasks tab shows that history.
 
-To move an existing clone from the old layout (`tasks/*.md` and
-`system/proposals/*.yaml` in git), run `fausto migrate -dry-run`,
-then without `-dry-run`. It imports both into the database, keeps their Jira
-keys and statuses, removes the files with one commit, and, with Jira
-configured, attaches each task's `.md` to its issue. It is safe to run again.
 
 ## Jira
 
@@ -149,7 +186,7 @@ FAUSTO_JIRA_PROJECT=HAB
 The token is read only from the environment and is never logged or sent to
 the browser. Without `FAUSTO_JIRA_URL` the integration is off.
 
-A sync runs when you accept a proposal (for its new tasks), when a task's
+A sync runs when a proposal is applied (for its new tasks), when a task's
 status changes (in the Tasks tab, or with `fausto task start|done|drop` when
 Jira is configured there), and on demand with "Sync with Jira" in the Tasks
 tab or from the command line:
@@ -162,7 +199,7 @@ fausto jira sync             # all tasks, or name task ids
 Each issue carries the label `fausto-task-<task id>`: a sync finds an issue by
 that label before creating one, so retrying after a failure never creates
 duplicates. A sync also attaches `<task id>.md` to any issue missing it; the
-attachment leaves out the status, which Jira shows live. Accepting a proposal
+attachment leaves out the status, which Jira shows live. Applying a proposal
 still succeeds when Jira is unreachable; the next sync catches up.
 
 ## Changing the spec
@@ -184,12 +221,19 @@ Changes to the spec go through proposals, kept in the database:
    shows the spec changes, the diff, the checks on the result, and the task
    each affected agent will get. If an item it changes was changed on the
    base branch since, it says so and can't be accepted: propose it again.
-4. Accept commits the spec change to the base branch (the checked-out
-   branch, or `-base`) as one commit, fast-forwards the work tree, and
-   creates a task per agent in the database. Reject marks it rejected; it
-   stays listed and reviewable.
+4. Accept puts the spec change, as one commit on top of the base branch, on
+   a branch of its own, `fausto-proposal/<id>`, and on GitHub opens a pull
+   request for it. Fausto never commits to the base branch: people review
+   and merge the change like any other. The proposal is then accepted,
+   waiting for the merge. Reject marks it rejected; it stays listed and
+   reviewable.
+5. Once the change is in the base branch (merged, squashed or rebased), the
+   proposal is applied and each affected agent gets its task. Fausto checks
+   accepted proposals every minute (`-poll`), when you open the Proposals
+   tab, and on "Check for merge". A pull request closed without merging
+   withdraws the proposal, and its tasks are never created.
 
-The accept commit uses git's identity unless you pass `-author "Name <email>"`.
+The proposal commit uses git's identity unless you pass `-author "Name <email>"`.
 
 ## Running agents
 

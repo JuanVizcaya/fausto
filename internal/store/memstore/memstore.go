@@ -44,6 +44,7 @@ func clone[T any](v T) T {
 func cloneProposal(p store.Proposal) store.Proposal {
 	out := clone(p)
 	out.Changes = clone(p.Changes) // json:"-" on Proposal
+	out.PendingTasks = clone(p.PendingTasks)
 	return out
 }
 
@@ -82,21 +83,22 @@ func (s *Store) Proposals(context.Context) ([]store.Proposal, error) {
 	return out, nil
 }
 
-func (s *Store) CloseProposal(_ context.Context, id, status, date, commit string, tasks []string) error {
+func (s *Store) MoveProposal(_ context.Context, id, from, to string, u store.ProposalUpdate) error {
+	if err := store.ValidMove(from, to); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.proposals[id]
 	if !ok {
 		return store.ErrNotFound
 	}
-	if p.Status != "open" {
+	if p.Status != from {
 		return store.ErrChanged
 	}
-	p.Status, p.Commit, p.Tasks, p.Updated = status, commit, append([]string{}, tasks...), s.now()
-	if status == "accepted" {
-		p.Accepted = date
-	}
-	s.proposals[id] = p
+	u.Apply(&p, to)
+	p.Updated = s.now()
+	s.proposals[id] = cloneProposal(p)
 	return nil
 }
 
@@ -171,3 +173,67 @@ func (s *Store) SetTaskJira(_ context.Context, id, key string) error {
 }
 
 func (s *Store) Close(context.Context) error { return nil }
+
+// Projects is an in-memory store.Projects.
+type Projects struct {
+	mu       sync.Mutex
+	projects map[string]store.Project
+	stores   map[string]*Store
+}
+
+// NewProjects returns an empty registry.
+func NewProjects() *Projects {
+	return &Projects{projects: map[string]store.Project{}, stores: map[string]*Store{}}
+}
+
+var _ store.Projects = (*Projects)(nil)
+
+func (r *Projects) Projects(context.Context) ([]store.Project, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []store.Project{}
+	for _, p := range r.projects {
+		out = append(out, p)
+	}
+	store.SortProjects(out)
+	return out, nil
+}
+
+func (r *Projects) Project(_ context.Context, id string) (*store.Project, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	return &p, nil
+}
+
+func (r *Projects) PutProject(_ context.Context, p *store.Project) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p.Updated = time.Now().UTC()
+	r.projects[p.ID] = *p
+	return nil
+}
+
+func (r *Projects) DeleteProject(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.projects[id]; !ok {
+		return store.ErrNotFound
+	}
+	delete(r.projects, id)
+	return nil
+}
+
+func (r *Projects) Store(id string) store.Store {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stores[id] == nil {
+		r.stores[id] = New()
+	}
+	return r.stores[id]
+}
+
+func (r *Projects) Close(context.Context) error { return nil }

@@ -1,4 +1,23 @@
-import type { Change, CodeModel, Info, Proposal, ProposalDetail, Report, Schema, Spec, Finding, JiraIssue, JiraOutcome, JiraReport, Task } from "./types";
+import type {
+  Change,
+  CodeModel,
+  Info,
+  Proposal,
+  ProposalDetail,
+  ProjectInfo,
+  Report,
+  Schema,
+  Spec,
+  Finding,
+  JiraIssue,
+  JiraOutcome,
+  JiraReport,
+  SyncReport,
+  Task,
+} from "./types";
+
+/** The project this page shows: ?project=<id>, or the server's first. */
+export const currentProject = new URLSearchParams(window.location.search).get("project") ?? "";
 
 /** An API error, with schema findings when the server rejected a spec. */
 export class ApiError extends Error {
@@ -15,7 +34,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const res = await fetch(path, {
     method,
     cache: "no-store",
-    headers: body === undefined ? { "X-Fausto-Request": "1" } : { "Content-Type": "application/json", "X-Fausto-Request": "1" },
+    headers: {
+      "X-Fausto-Request": "1",
+      ...(currentProject ? { "X-Fausto-Project": currentProject } : {}),
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => null);
@@ -36,10 +59,13 @@ export const fetchProposals = () => get<Proposal[]>("/api/proposals");
 export const fetchProposal = (id: string) => get<ProposalDetail>(`/api/proposals/${encodeURIComponent(id)}`);
 export const createProposal = (title: string, description: string, milestone: string, changes: Change[]) =>
   request<ProposalDetail>("POST", "/api/proposals", { title, description, milestone, changes });
-export const approveProposal = (id: string) =>
-  request<Proposal & { jiraSync?: JiraOutcome }>("POST", `/api/proposals/${encodeURIComponent(id)}/approve`);
+export const fetchProjects = () => get<ProjectInfo[]>("/api/projects");
+/** Accepts a proposal: its change goes to a branch (and a pull request) to be merged. */
+export const approveProposal = (id: string) => request<Proposal>("POST", `/api/proposals/${encodeURIComponent(id)}/approve`);
+/** Checks accepted proposals for a merge; merged ones are applied and get their tasks. */
+export const syncProposals = () => request<SyncReport>("POST", "/api/proposals/sync");
 export const rejectProposal = (id: string) => request<Proposal>("POST", `/api/proposals/${encodeURIComponent(id)}/reject`);
-/** Sets the status of a task for a person; fausto commits it to the base branch. */
+/** Sets the status of a task for a person. */
 export const setTaskStatus = (id: string, status: Task["status"]) =>
   request<Task & { jiraSync?: JiraOutcome }>("POST", `/api/tasks/${encodeURIComponent(id)}/status`, { status });
 /** The tasks' issues as they are in Jira right now. */

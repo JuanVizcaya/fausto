@@ -14,6 +14,7 @@ import (
 
 	"github.com/JuanVizcaya/fausto/internal/check"
 	"github.com/JuanVizcaya/fausto/internal/edit"
+	"github.com/JuanVizcaya/fausto/internal/source"
 	"github.com/JuanVizcaya/fausto/internal/spec"
 	"github.com/JuanVizcaya/fausto/internal/store"
 	"github.com/JuanVizcaya/fausto/internal/store/memstore"
@@ -34,9 +35,8 @@ func run(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// newRepo copies the current Habyta files into a fresh git repository on
-// branch main and returns a store for it, with an empty database. Files
-// from before the database (tasks/, system/proposals/) are left out.
+// newRepo copies the example project into a fresh git repository on branch
+// main and returns a store for it, with an empty database.
 func newRepo(t *testing.T) *Store {
 	t.Helper()
 	files, err := check.ListFiles(repoRoot)
@@ -45,9 +45,6 @@ func newRepo(t *testing.T) *Store {
 	}
 	root := t.TempDir()
 	for _, f := range files {
-		if strings.HasPrefix(f, legacyRecordsDir+"/") || (strings.HasPrefix(f, legacyTasksDir+"/") && f != legacyTasksDir+"/README.md") {
-			continue
-		}
 		data, err := os.ReadFile(filepath.Join(repoRoot, f))
 		if err != nil {
 			t.Fatal(err)
@@ -64,7 +61,7 @@ func newRepo(t *testing.T) *Store {
 	run(t, root, "add", "-A")
 	run(t, root, "commit", "-q", "-m", "initial")
 	return &Store{
-		Root: root, Base: "main", Author: "Test <test@example.com>", DB: memstore.New(),
+		Src: &source.Local{Path: root, Branch: "main"}, Author: "Test <test@example.com>", DB: memstore.New(),
 		Now: func() time.Time { return time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC) },
 	}
 }
@@ -107,11 +104,29 @@ func raw(t *testing.T, v any) json.RawMessage {
 
 func currentSpec(t *testing.T, s *Store) *spec.Spec {
 	t.Helper()
-	sp, err := spec.Load(s.Root)
+	sp, err := spec.Load(s.Root())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return sp
+}
+
+// merge accepts proposal id, merges its branch into main as a person
+// would (a fast-forward), and syncs, which applies it.
+func merge(t *testing.T, s *Store, id string) *store.Proposal {
+	t.Helper()
+	if _, err := s.Approve(ctx, id); err != nil {
+		t.Fatalf("approve %s: %v", id, err)
+	}
+	run(t, s.Root(), "merge", "-q", "--ff-only", BranchPrefix+id)
+	if _, err := s.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.DB.Proposal(ctx, id)
+	if err != nil || p.Status != "applied" {
+		t.Fatalf("after merge: %+v, %v", p, err)
+	}
+	return p
 }
 
 func plan(d *Detail, agent string) *TaskPlan {
@@ -140,7 +155,7 @@ func TestCreateApproveCreatesTasks(t *testing.T) {
 	if d.ID != "2026-10-06-plan-billing-service" || d.Status != "open" || d.Author != "Test <test@example.com>" {
 		t.Errorf("proposal = %+v", d.Proposal)
 	}
-	if status := run(t, s.Root, "status", "--porcelain"); status != "" {
+	if status := run(t, s.Root(), "status", "--porcelain"); status != "" {
 		t.Errorf("work tree changed by Create:\n%s", status)
 	}
 	if got := len(d.Changes); got != 2 || d.Changes[0].String() != "component `billing` (Billing service) added" {
@@ -162,26 +177,54 @@ func TestCreateApproveCreatesTasks(t *testing.T) {
 		t.Errorf("orchestrator plan = %+v (principle changes reach every charter, agent or human)", o)
 	}
 
-	if run(t, s.Root, "rev-parse", "HEAD") != d.BaseCommit {
+	if run(t, s.Root(), "rev-parse", "HEAD") != d.BaseCommit {
 		t.Error("Create made a commit")
 	}
 
+	head := run(t, s.Root(), "rev-parse", "HEAD")
 	accepted, err := s.Approve(ctx, d.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if accepted.Status != "accepted" || len(accepted.Tasks) != len(d.Plans) || accepted.Accepted != "2026-10-06" {
+	if accepted.Status != "accepted" || len(accepted.Tasks) != 0 || len(accepted.PendingTasks) != len(d.Plans) ||
+		accepted.Accepted != "2026-10-06" || accepted.Branch != BranchPrefix+d.ID {
 		t.Errorf("accepted = %+v", accepted)
 	}
-	// One commit on top of the base, touching only the spec (and the agent
-	// definitions generated from it).
-	if accepted.Commit != run(t, s.Root, "rev-parse", "HEAD") || run(t, s.Root, "rev-parse", "HEAD^") != d.BaseCommit {
-		t.Errorf("commit %s is not one commit on top of %s", accepted.Commit, d.BaseCommit)
+	// Nothing committed to main, nothing in the work tree: the change is
+	// one commit on top of the base, on its own branch.
+	if run(t, s.Root(), "rev-parse", "HEAD") != head || run(t, s.Root(), "rev-parse", "main") != head {
+		t.Error("accepting moved main")
 	}
-	for _, f := range strings.Fields(run(t, s.Root, "diff", "--name-only", "HEAD^", "HEAD")) {
+	if status := run(t, s.Root(), "status", "--porcelain"); status != "" {
+		t.Errorf("work tree changed by accepting:\n%s", status)
+	}
+	if run(t, s.Root(), "rev-parse", accepted.Branch) != accepted.Commit || run(t, s.Root(), "rev-parse", accepted.Commit+"^") != d.BaseCommit {
+		t.Errorf("branch %s is not one commit %s on top of %s", accepted.Branch, accepted.Commit, d.BaseCommit)
+	}
+	for _, f := range strings.Fields(run(t, s.Root(), "diff", "--name-only", accepted.Commit+"^", accepted.Commit)) {
 		if !strings.HasPrefix(f, "system/") && !strings.HasPrefix(f, ".claude/agents/") {
-			t.Errorf("accept commit touches %s", f)
+			t.Errorf("accepted commit touches %s", f)
 		}
+	}
+	if tasks, _ := s.DB.Tasks(ctx, store.TaskFilter{}); len(tasks) != 0 {
+		t.Errorf("tasks before the change is merged: %+v", tasks)
+	}
+	if got, err := s.Detail(ctx, d.ID); err != nil || len(got.Changes) != 2 || !strings.Contains(got.Diff, "billing") || len(got.Plans) != len(d.Plans) {
+		t.Errorf("accepted detail = %+v, %v", got, err)
+	}
+	// Not merged yet: syncing changes nothing.
+	if res, err := s.Sync(ctx); err != nil || len(res) != 0 {
+		t.Errorf("sync before merge = %+v, %v", res, err)
+	}
+
+	run(t, s.Root(), "merge", "-q", "--ff-only", accepted.Branch)
+	res, err := s.Sync(ctx)
+	if err != nil || len(res) != 1 || res[0].Status != "applied" {
+		t.Fatalf("sync after merge = %+v, %v", res, err)
+	}
+	applied, _ := s.DB.Proposal(ctx, d.ID)
+	if applied.Status != "applied" || applied.Applied != "2026-10-06" || len(applied.Tasks) != len(d.Plans) {
+		t.Errorf("applied = %+v", applied)
 	}
 	task, err := s.DB.Task(ctx, d.ID+"--platform")
 	if err != nil {
@@ -195,24 +238,17 @@ func TestCreateApproveCreatesTasks(t *testing.T) {
 		t.Errorf("tasks = %d, plans = %d", len(tasks), len(d.Plans))
 	}
 	if currentSpec(t, s).Component("billing") == nil {
-		t.Error("billing not in the spec after approval")
+		t.Error("billing not in the spec after merging")
 	}
-	report, err := check.Run(s.Root, nil)
+	report, err := check.Run(s.Root(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertNoNewFailures(t, s, report, "after approval")
-	if status := run(t, s.Root, "status", "--porcelain"); status != "" {
-		t.Errorf("work tree not clean after approval:\n%s", status)
-	}
+	assertNoNewFailures(t, s, report, "after merging")
 
 	list, err := s.List(ctx)
-	if err != nil || len(list) != 1 || list[0].Status != "accepted" {
+	if err != nil || len(list) != 1 || list[0].Status != "applied" {
 		t.Errorf("list = %+v, %v", list, err)
-	}
-	// The accepted proposal's review shows what its commit changed.
-	if got, err := s.Detail(ctx, d.ID); err != nil || len(got.Changes) != 2 || !strings.Contains(got.Diff, "billing") {
-		t.Errorf("accepted detail = %+v, %v", got, err)
 	}
 	var ce *ConflictError
 	if _, err := s.Approve(ctx, d.ID); !errors.As(err, &ce) {
@@ -250,9 +286,7 @@ func TestDeleteComponentOmitsItFromTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Approve(ctx, add.ID); err != nil {
-		t.Fatalf("approve add: %v", err)
-	}
+	merge(t, s, add.ID)
 
 	d, err := s.Create(ctx, "Delete throwaway", "Not needed anymore.", "", []edit.Change{
 		{Kind: "component", ID: "throwaway"},
@@ -263,9 +297,7 @@ func TestDeleteComponentOmitsItFromTask(t *testing.T) {
 	if p := plan(d, "platform"); p == nil || slices.Contains(p.Components, "throwaway") {
 		t.Errorf("platform plan = %+v (must not list the removed component)", p)
 	}
-	if _, err := s.Approve(ctx, d.ID); err != nil {
-		t.Fatalf("approve delete: %v", err)
-	}
+	merge(t, s, d.ID)
 	if after := currentSpec(t, s); after.Component("throwaway") != nil {
 		t.Error("throwaway still present after deletion")
 	}
@@ -349,9 +381,7 @@ func TestConflictingProposals(t *testing.T) {
 	}
 	a := propose("Activate web", "active")
 	b := propose("Deprecate web", "deprecated")
-	if _, err := s.Approve(ctx, a.ID); err != nil {
-		t.Fatal(err)
-	}
+	merge(t, s, a.ID)
 	d, err := s.Detail(ctx, b.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -375,12 +405,8 @@ func TestNonConflictingProposalAfterBaseMoved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Approve(ctx, a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Approve(ctx, b.ID); err != nil {
-		t.Fatalf("approve after base moved: %v", err)
-	}
+	merge(t, s, a.ID)
+	merge(t, s, b.ID)
 	sp := currentSpec(t, s)
 	if len(sp.Domains.Glossary) != 4 || sp.Tech.Technologies[len(sp.Tech.Technologies)-1].ID != "nats" {
 		t.Errorf("both proposals not applied")
@@ -406,9 +432,7 @@ func TestMilestoneProposal(t *testing.T) {
 	if g := plan(d, "gateway"); g == nil || len(g.SpecChanges) != 1 {
 		t.Fatalf("gateway plan = %+v (plans = %+v)", g, d.Plans)
 	}
-	if _, err := s.Approve(ctx, d.ID); err != nil {
-		t.Fatal(err)
-	}
+	merge(t, s, d.ID)
 	after := currentSpec(t, s)
 	tasks, _ := s.DB.Tasks(ctx, store.TaskFilter{})
 	if len(tasks) != len(d.Plans) {
@@ -541,11 +565,70 @@ func TestProposalGeneratesAgentDefinition(t *testing.T) {
 	if !slices.Contains(d.Files, ".claude/agents/billing.md") {
 		t.Fatalf("files = %v, want the generated definition", d.Files)
 	}
-	if _, err := s.Approve(ctx, d.ID); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(filepath.Join(s.Root, ".claude", "agents", "billing.md"))
+	merge(t, s, d.ID)
+	data, err := os.ReadFile(filepath.Join(s.Root(), ".claude", "agents", "billing.md"))
 	if err != nil || !strings.Contains(string(data), "You are the **Billing agent**") {
 		t.Errorf("definition after approval: %v\n%s", err, data)
+	}
+}
+
+// A squash merge leaves the proposal's commit out of main's history; the
+// proposal is applied once main has the same spec items.
+func TestSquashMergeApplies(t *testing.T) {
+	s := newRepo(t)
+	d, err := s.Create(ctx, "Assess NATS", "", "", []edit.Change{{Kind: "technology", Value: json.RawMessage(`{"id":"nats","name":"NATS","category":"infrastructure","status":"assess"}`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Approve(ctx, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run(t, s.Root(), "merge", "-q", "--squash", p.Branch)
+	run(t, s.Root(), "commit", "-q", "-m", "Assess NATS (squashed)")
+	run(t, s.Root(), "branch", "-q", "-D", p.Branch) // as GitHub does after merging
+	if res, err := s.Sync(ctx); err != nil || len(res) != 1 || res[0].Status != "applied" {
+		t.Errorf("sync = %+v, %v", res, err)
+	}
+}
+
+// Deleting an accepted proposal's branch without merging it withdraws the
+// proposal; its tasks are never created.
+func TestDeletedBranchWithdraws(t *testing.T) {
+	s := newRepo(t)
+	d, err := s.Create(ctx, "Assess NATS", "", "", []edit.Change{{Kind: "technology", Value: json.RawMessage(`{"id":"nats","name":"NATS","category":"infrastructure","status":"assess"}`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Approve(ctx, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run(t, s.Root(), "branch", "-q", "-D", p.Branch)
+	if res, err := s.Sync(ctx); err != nil || len(res) != 1 || res[0].Status != "withdrawn" {
+		t.Errorf("sync = %+v, %v", res, err)
+	}
+	if tasks, _ := s.DB.Tasks(ctx, store.TaskFilter{}); len(tasks) != 0 {
+		t.Errorf("tasks = %+v", tasks)
+	}
+	if got, err := s.Detail(ctx, d.ID); err != nil || got.Status != "withdrawn" || got.Conflict == "" {
+		t.Errorf("withdrawn detail = %+v, %v", got, err)
+	}
+}
+
+// A proposal accepted before reviews went through branches had its change
+// committed and its tasks created at once; a sync marks it applied.
+func TestOldAcceptedProposalBecomesApplied(t *testing.T) {
+	s := newRepo(t)
+	old := &store.Proposal{ID: "2026-10-01-old", Title: "Old", Created: "2026-10-01", Status: "accepted", Accepted: "2026-10-01",
+		Commit: run(t, s.Root(), "rev-parse", "HEAD"), Tasks: []string{"2026-10-01-old--platform"}}
+	if err := s.DB.CreateProposal(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := s.Sync(ctx); err != nil || len(res) != 1 || res[0].Status != "applied" {
+		t.Errorf("sync = %+v, %v", res, err)
+	}
+	if p, _ := s.DB.Proposal(ctx, old.ID); p.Applied != "2026-10-01" || len(p.Tasks) != 1 {
+		t.Errorf("old = %+v", p)
 	}
 }

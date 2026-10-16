@@ -600,3 +600,24 @@ func TestComposeInclude(t *testing.T) {
 		t.Errorf("services findings = %+v", r.Findings)
 	}
 }
+
+// A project whose code isn't where DefaultLayout expects says so in
+// .fausto.yaml.
+func TestLayoutFile(t *testing.T) {
+	files := fixture(t)
+	files["deploy/compose.yaml"] = files["compose.yaml"]
+	delete(files, "compose.yaml")
+	if r := result(t, runFixture(t, files), "services"); r.Status != Fail {
+		t.Errorf("services without compose.yaml: %+v", r)
+	}
+	files[spec.LayoutFile] = "compose_file: deploy/compose.yaml\n"
+	for _, name := range []string{"services", "runtime"} {
+		if r := result(t, runFixture(t, files), name); r.Status != Pass {
+			t.Errorf("%s with the layout file: %+v", name, r.Findings)
+		}
+	}
+	files[spec.LayoutFile] = "compose: deploy/compose.yaml\n"
+	if r := result(t, runFixture(t, files), "schema"); r.Status != Fail || !strings.Contains(r.Findings[0].Message, spec.LayoutFile) {
+		t.Errorf("schema with an unknown layout key: %+v", r)
+	}
+}

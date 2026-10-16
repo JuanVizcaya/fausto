@@ -1,20 +1,22 @@
-// Command fausto supervises the Habyta system: it checks that the code
-// matches the spec under system/ and serves a web UI for reviewing it.
+// Command fausto keeps a project's code in line with its architecture spec
+// under system/: it checks that the code matches the spec, and serves a web
+// UI for reviewing it and proposing changes to it.
 //
 // Usage:
 //
 //	fausto check [-root dir] [-json] [check ...]
 //	fausto agents [-root dir]
-//	fausto serve [-root dir] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url]
-//	fausto jira sync [-dry-run] [task ...]
-//	fausto task list|pull|start|done|drop ...
-//	fausto migrate [-root dir] [-base branch] [-author "Name <email>"] [-dry-run]
+//	fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
+//	fausto project list|add|rm ...
+//	fausto jira sync [-project id] [-dry-run] [task ...]
+//	fausto task list|pull|start|done|drop [-project id] ...
 //
-// Proposals and tasks live in a MongoDB database (FAUSTO_MONGO_URI); git
-// holds only the spec and the code.
+// Projects, and their proposals and tasks, live in fausto's MongoDB
+// database (FAUSTO_MONGO_URI); a project's git holds only its spec and code.
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -38,6 +40,8 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/proposal"
 	"github.com/JuanVizcaya/fausto/internal/server"
 	"github.com/JuanVizcaya/fausto/internal/spec"
+	"github.com/JuanVizcaya/fausto/internal/store"
+	"github.com/JuanVizcaya/fausto/internal/store/mongostore"
 )
 
 func main() {
@@ -48,16 +52,18 @@ const usage = `usage:
   fausto check [-root dir] [-json] [check ...]
   fausto agents [-root dir]    regenerate .claude/agents and .github/CODEOWNERS
                                from system/agents
-  fausto serve [-root dir] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url]
-  fausto jira sync [-dry-run] [task ...]
+  fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
+                               the web UI, for every project (or only -root)
+  fausto project list
+  fausto project add <id> -path <clone> | -github owner/repo [-name name] [-base branch] [-adopt]
+  fausto project rm <id>
+  fausto jira sync [-project id] [-dry-run] [task ...]
                                mirror tasks as Jira issues (needs FAUSTO_JIRA_*)
-  fausto task list [-agent id] [-status s,...]
-  fausto task pull [-root dir] <agent>
+  fausto task list [-project id] [-agent id] [-status s,...]
+  fausto task pull [-root dir] [-project id] <agent>
                                write the agent's open tasks to .fausto/tasks/
-  fausto task start|done|drop <task>
-  fausto migrate [-root dir] [-base branch] [-author "Name <email>"] [-dry-run]
-                               move tasks/ and system/proposals/ into the database
-Proposals and tasks live in MongoDB: set FAUSTO_MONGO_URI (and FAUSTO_MONGO_DB).`
+  fausto task start|done|drop [-project id] <task>
+Projects, proposals and tasks live in MongoDB: set FAUSTO_MONGO_URI (and FAUSTO_MONGO_DB).`
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -79,8 +85,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runJiraSync(args[2:], stdout, stderr)
 	case "task":
 		return runTask(args[1:], stdout, stderr)
-	case "migrate":
-		return runMigrate(args[1:], stdout, stderr)
+	case "project":
+		return runProject(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintln(stderr, usage)
 		fmt.Fprintln(stderr, "checks:", strings.Join(check.Names(), ", "))
@@ -168,57 +174,68 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 func runServe(args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	root := rootFlag(fs)
+	root := fs.String("root", os.Getenv("FAUSTO_ROOT"), "serve only the local clone at this directory (env FAUSTO_ROOT; default: every project in the database, or the project around the current directory)")
+	project := projectFlag(fs)
 	addr := fs.String("addr", envOr("FAUSTO_ADDR", "127.0.0.1:7070"), "listen address (env FAUSTO_ADDR)")
-	base := fs.String("base", os.Getenv("FAUSTO_BASE"), "branch that proposals target and are merged into (env FAUSTO_BASE; default: the checked-out branch)")
+	base := fs.String("base", os.Getenv("FAUSTO_BASE"), "with -root, the branch proposals target (env FAUSTO_BASE; default: the checked-out branch)")
 	author := fs.String("author", os.Getenv("FAUSTO_AUTHOR"), `identity for proposal commits, "Name <email>" (env FAUSTO_AUTHOR; default: git's configured identity)`)
-	repo := fs.String("repo", os.Getenv("FAUSTO_REPO"), "GitHub URL of the repository, for the Architecture tab to link into (env FAUSTO_REPO; default: detected from the origin remote)")
+	repo := fs.String("repo", os.Getenv("FAUSTO_REPO"), "with -root, the GitHub URL of the repository, for the UI to link into (env FAUSTO_REPO; default: detected from the origin remote)")
+	poll := fs.Duration("poll", envDuration("FAUSTO_POLL", time.Minute), "how often to check accepted proposals for a merge (env FAUSTO_POLL; 0 turns it off)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if err := resolveRoot(root); err != nil {
-		fmt.Fprintln(stderr, err)
-		return 2
-	}
 	logger := slog.New(slog.NewTextHandler(stderr, nil))
-	// readonly says why editing is off; the UI shows it.
-	readonly := ""
-	if *base == "" {
-		out, err := exec.Command("git", "-C", *root, "-c", "safe.directory=*", "symbolic-ref", "--quiet", "--short", "HEAD").Output()
-		*base = strings.TrimSpace(string(out))
-		if err != nil || *base == "" {
-			readonly = "no checked-out branch to propose against. Check out a branch, or pass -base (env FAUSTO_BASE)."
-		}
-	}
-	if *base != "" && *author == "" {
-		// Proposal commits need an identity; without one, fail now rather
-		// than on the first proposal.
-		if err := exec.Command("git", "-C", *root, "-c", "safe.directory=*", "var", "GIT_AUTHOR_IDENT").Run(); err != nil {
-			readonly = `git has no identity for proposal commits. Set FAUSTO_AUTHOR="Name <email>" (in .env when using docker compose) or pass -author, then restart fausto.`
-			*base = ""
-		}
-	}
-	if readonly != "" {
-		logger.Warn("editing disabled: " + readonly)
-	}
-	if *repo == "" {
-		*repo = detectGithubRepo(*root)
-	}
-	db, err := openDB(context.Background())
-	if err != nil && readonly == "" {
-		fix := "Set FAUSTO_MONGO_URI (see https://github.com/JuanVizcaya/fausto#storage)"
-		if os.Getenv("FAUSTO_MONGO_URI") != "" {
-			fix = "Check that the database in FAUSTO_MONGO_URI is running and reachable"
-		}
-		readonly = err.Error() + ". " + fix + ", then restart fausto."
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	db, dbErr := mongostore.FromEnv(ctx)
+	if dbErr == nil && db == nil {
+		dbErr = errors.New("FAUSTO_MONGO_URI is not set")
 	}
 	if db != nil {
 		defer db.Close(context.Background())
 	}
-	var store *proposal.Store
-	if *base != "" && db != nil && readonly == "" {
-		store = &proposal.Store{Root: *root, Base: *base, Author: *author, DB: db}
+	// Which projects: the one named by -root, else the registered ones,
+	// else the one around the current directory.
+	var projects []store.Project
+	if *root == "" && db != nil {
+		var err error
+		if projects, err = db.Projects(ctx); err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
 	}
+	if len(projects) == 0 && *root == "" {
+		if r, err := findRoot(); err == nil {
+			*root = r
+		} else if db == nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		} else {
+			logger.Warn("no projects yet: add one with `fausto project add`, then restart fausto")
+		}
+	}
+	if len(projects) == 0 && *root != "" {
+		abs, _ := filepath.Abs(*root)
+		p := store.Project{Path: abs, Base: *base}
+		if db != nil {
+			if reg := projectAt(ctx, db, abs); reg != nil {
+				p = *reg
+				if *base != "" {
+					p.Base = *base
+				}
+			}
+		}
+		if p.ID == "" {
+			p.ID = *project
+		}
+		if p.ID == "" {
+			p.ID = slugOf(filepath.Base(abs))
+		}
+		p.Name = cmp.Or(p.Name, p.ID)
+		projects = []store.Project{p}
+	}
+
 	jc, err := jiraClient()
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -226,24 +243,36 @@ func runServe(args []string, stderr io.Writer) int {
 	}
 	if jc != nil {
 		logger.Info("mirroring tasks in Jira", "url", jc.URL, "project", jc.Project)
-		if store == nil {
-			logger.Warn("Jira sync is off while fausto is read-only")
+	}
+	var entries []server.Project
+	for _, p := range projects {
+		e := server.Project{ID: p.ID, Name: cmp.Or(p.Name, p.ID), Source: cmp.Or(p.Path, "github.com/"+p.GitHub)}
+		h, err := openProject(ctx, p, db, dbErr, *author, *repo, jc, *poll, logger)
+		if err != nil {
+			logger.Error("open project", "project", p.ID, "error", err)
+			e.Error = err.Error()
+		} else {
+			h.Start(ctx)
+			e.Handler = h
 		}
+		entries = append(entries, e)
 	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           server.New(*root, store, readonly, *repo, jc, logger),
+		Handler:           server.Multi(entries),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
 	}()
-	logger.Info("fausto serving", "url", "http://"+*addr, "root", *root, "base", *base)
+	ids := make([]string, len(projects))
+	for i, p := range projects {
+		ids[i] = p.ID
+	}
+	logger.Info("fausto serving", "url", "http://"+*addr, "projects", strings.Join(ids, ", "))
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("serve", "error", err)
 		return 1
@@ -251,11 +280,48 @@ func runServe(args []string, stderr io.Writer) int {
 	return 0
 }
 
+// openProject opens p's repository and returns its handler. Without a
+// database (dbErr), or without an identity for commits, the project is
+// served read-only, with the reason in the UI.
+func openProject(ctx context.Context, p store.Project, db *mongostore.DB, dbErr error, author, repo string, jc *jira.Client, poll time.Duration, logger *slog.Logger) (*server.Handler, error) {
+	src, err := openSource(ctx, p)
+	if err != nil {
+		var noBase *noBaseError
+		if !errors.As(err, &noBase) {
+			return nil, err
+		}
+		// A local clone without a checked-out branch is still readable.
+		return server.New(server.Options{Root: p.Path, Readonly: err.Error(), Repo: cmp.Or(repo, detectGithubRepo(p.Path)), Logger: logger}), nil
+	}
+	if repo == "" {
+		repo = cmp.Or(src.Web(), detectGithubRepo(src.Dir()))
+	}
+	readonly := ""
+	if dbErr != nil {
+		fix := "Set FAUSTO_MONGO_URI (see https://github.com/JuanVizcaya/fausto#storage)"
+		if os.Getenv("FAUSTO_MONGO_URI") != "" {
+			fix = "Check that the database in FAUSTO_MONGO_URI is running and reachable"
+		}
+		readonly = dbErr.Error() + ". " + fix + ", then restart fausto."
+	} else if proposal.Who(src.Dir(), author) == "unknown" {
+		// Proposal commits need an identity; without one, say so now
+		// rather than on the first accept.
+		readonly = `git has no identity for proposal commits. Set FAUSTO_AUTHOR="Name <email>" (in .env when using docker compose) or pass -author, then restart fausto.`
+	}
+	if readonly != "" {
+		logger.Warn("editing disabled", "project", p.ID, "reason", readonly)
+		return server.New(server.Options{Root: src.Dir(), Readonly: readonly, Repo: repo, Logger: logger}), nil
+	}
+	ps := &proposal.Store{Src: src, Author: author, DB: db.Store(p.ID)}
+	return server.New(server.Options{Root: src.Dir(), Proposals: ps, Repo: repo, Jira: jc, Logger: logger, Poll: poll}), nil
+}
+
 // runJiraSync mirrors the tasks (or the named ones) as Jira issues and
 // records the keys of newly linked issues.
 func runJiraSync(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("jira sync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	project := projectFlag(fs)
 	dryRun := fs.Bool("dry-run", false, "only read from Jira and print what a sync would do")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -271,13 +337,19 @@ func runJiraSync(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	db, err := openDB(ctx)
+	reg, err := openDB(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
-	defer db.Close(context.Background())
-	report, err := jira.SyncStore(ctx, jc, db, fs.Args(), *dryRun)
+	defer reg.Close(context.Background())
+	root, _ := findRoot()
+	id, err := resolveProject(ctx, reg, *project, root)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	report, err := jira.SyncStore(ctx, jc, reg.Store(id), fs.Args(), *dryRun)
 	if report != nil {
 		printJiraReport(stdout, report)
 	}
@@ -342,6 +414,13 @@ func githubURL(remote string) string {
 
 func rootFlag(fs *flag.FlagSet) *string {
 	return fs.String("root", os.Getenv("FAUSTO_ROOT"), "repository root (env FAUSTO_ROOT; default: nearest parent directory containing system/system.yaml)")
+}
+
+func envDuration(key string, fallback time.Duration) time.Duration {
+	if d, err := time.ParseDuration(os.Getenv(key)); err == nil {
+		return d
+	}
+	return fallback
 }
 
 func envOr(key, fallback string) string {

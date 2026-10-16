@@ -69,7 +69,7 @@ type Check struct {
 // All lists every check in the order they run.
 var All = []Check{
 	{"schema", "Spec files match their schemas and every reference resolves.", checkSchema},
-	{"services", "Declared services match backend/cmd and compose.yaml.", checkServices},
+	{"services", "Declared services match their commands and the Compose file.", checkServices},
 	{"layers", "Go imports follow declared dependencies and layers.", checkLayers},
 	{"db-ownership", "Each database is used by exactly one declared owner.", checkDBOwnership},
 	{"contracts", "Declared protobuf contracts exist, are versioned, and are generated.", checkContracts},
@@ -262,7 +262,7 @@ func (r *Repo) contractOwner(path string) (*spec.Component, *spec.Contract) {
 // isEventContract reports whether a contract defines events of its owner.
 func (r *Repo) isEventContract(owner *spec.Component, ct *spec.Contract) bool {
 	for _, e := range r.Spec.Events.Events {
-		if dir, _ := e.ProtoDir(); e.Producer == owner.ID && dir == ct.Proto {
+		if dir, _ := e.ProtoDir(r.Spec.Layout.ProtoRoot); e.Producer == owner.ID && dir == ct.Proto {
 			return true
 		}
 	}

@@ -20,8 +20,8 @@ fast-start version.
   `system/agents/*.yaml` charters
 - `go run ./cmd/fausto jira sync [-dry-run]` — mirror tasks as Jira issues
   (needs the `FAUSTO_JIRA_*` variables; see `README.md`)
-- `go run ./cmd/fausto task pull|start|done <…>` and `fausto migrate` — work
-  with tasks in the database (needs `FAUSTO_MONGO_URI`)
+- `go run ./cmd/fausto project add|list|rm` and `task pull|start|done <…>` —
+  projects and tasks in the database (needs `FAUSTO_MONGO_URI`)
 - `cd web && npm run dev` — live-reload dev server for the web UI
 
 ## Where things live
@@ -33,10 +33,15 @@ fast-start version.
 - `internal/code` — read-only Go/proto analysis (`go/parser`, no
   compilation) powering the Architecture drill-down views
 - `internal/edit` — applies structured, diff-minimizing edits to spec YAML
-- `internal/store` — the `Store` interface for proposals and tasks;
-  `memstore` (tests) and `mongostore` (MongoDB), both held to `storetest`
+- `internal/store` — the `Store` interface for one project's proposals and
+  tasks, and `Projects`, the registry of projects; `memstore` (tests) and
+  `mongostore` (MongoDB), both held to `storetest`
 - `internal/proposal` — proposals as stored edits: review against the
-  current base, accept as one spec commit, reject, and `Migrate`
+  current base, accept onto a branch (or pull request) of their own, sync
+  to applied or withdrawn once merged or closed, reject
+- `internal/source` — a project's repository: a local clone, or GitHub
+  (fausto's own clone, branches pushed and pull requests opened with
+  `FAUSTO_GITHUB_TOKEN`)
 - `internal/agentdef` — generates `.claude/agents/*.md` and
   `.github/CODEOWNERS` from agent charters
 - `internal/jira` — Jira Cloud client and the task → issue sync

@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { idField } from "./schema";
 import type { Change, Kind, Spec } from "./types";
+import { currentProject } from "./api";
 
 /** A pending edit plus a stable key: kind and the item's original id, or
  * its new id for items that don't exist yet. */
@@ -20,7 +21,8 @@ interface Draft {
 }
 
 const DraftContext = createContext<Draft | null>(null);
-const storageKey = "fausto-draft";
+// Drafts are per project: each one's edits only apply to its spec.
+const storageKey = "fausto-draft" + (currentProject ? ":" + currentProject : "");
 
 function loadStored(): DraftChange[] {
   try {

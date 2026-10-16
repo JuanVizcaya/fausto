@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/edit"
 	"github.com/JuanVizcaya/fausto/internal/jira"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
+	"github.com/JuanVizcaya/fausto/internal/source"
 	"github.com/JuanVizcaya/fausto/internal/spec"
 	"github.com/JuanVizcaya/fausto/internal/store"
 	"github.com/JuanVizcaya/fausto/internal/store/memstore"
@@ -32,7 +32,7 @@ func post(h http.Handler, path, body string) *httptest.ResponseRecorder {
 }
 
 func TestJiraOffByDefault(t *testing.T) {
-	h := New(repoRoot, &proposal.Store{Root: repoRoot, Base: "main"}, "", "", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: repoRoot, Proposals: &proposal.Store{Src: &source.Local{Path: repoRoot, Branch: "main"}}})
 	if rec := post(h, "/api/jira/sync", ""); rec.Code != http.StatusServiceUnavailable {
 		t.Errorf("sync: status %d, want 503", rec.Code)
 	}
@@ -89,7 +89,7 @@ func TestAcceptSucceedsWhenJiraFails(t *testing.T) {
 	jc := jira.NewClient(jira.Config{URL: down.URL, Email: "me@example.com", Token: "t", Project: "HAB", IssueType: "Task", Statuses: map[string]string{"open": "To Do"}})
 
 	root := tempRepo(t)
-	store := &proposal.Store{Root: root, Base: "main", Author: "Test <test@example.com>", DB: memstore.New(),
+	store := &proposal.Store{Src: &source.Local{Path: root, Branch: "main"}, Author: "Test <test@example.com>", DB: memstore.New(),
 		Now: func() time.Time { return time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC) }}
 	sp, err := spec.Load(root)
 	if err != nil {
@@ -103,22 +103,27 @@ func TestAcceptSucceedsWhenJiraFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := New(root, store, "", "", jc, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: root, Proposals: store, Jira: jc})
 	rec := post(h, "/api/proposals/"+d.ID+"/approve", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("approve: status %d: %s", rec.Code, rec.Body)
 	}
+	// Tasks, and so their Jira issues, come once the change is merged.
+	gitRun(t, root, "merge", "-q", "--ff-only", proposal.BranchPrefix+d.ID)
+	rec = post(h, "/api/proposals/sync", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sync: status %d: %s", rec.Code, rec.Body)
+	}
 	var res struct {
-		Status string   `json:"status"`
-		Tasks  []string `json:"tasks"`
-		Jira   struct {
+		Results []proposal.SyncResult `json:"results"`
+		Jira    struct {
 			Report jira.Report `json:"report"`
 		} `json:"jiraSync"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
 		t.Fatal(err)
 	}
-	if res.Status != "accepted" || len(res.Tasks) == 0 || res.Jira.Report.Failed() != len(res.Tasks) {
+	if len(res.Results) != 1 || res.Results[0].Status != "applied" || len(res.Results[0].Tasks) == 0 || res.Jira.Report.Failed() != len(res.Results[0].Tasks) {
 		t.Errorf("response = %s", rec.Body)
 	}
 	if !strings.Contains(rec.Body.String(), "Jira is down") {
@@ -131,7 +136,7 @@ func TestAcceptSucceedsWhenJiraFails(t *testing.T) {
 func TestTasksFromDatabase(t *testing.T) {
 	root := tempRepo(t)
 	db := memstore.New()
-	ps := &proposal.Store{Root: root, Base: "main", Author: "Test <test@example.com>", DB: db}
+	ps := &proposal.Store{Src: &source.Local{Path: root, Branch: "main"}, Author: "Test <test@example.com>", DB: db}
 	ctx := context.Background()
 	if err := db.CreateTasks(ctx, []store.Task{
 		{ID: "t--orchestrator", Agent: "orchestrator", Status: "open", Created: "2026-10-06", Title: "Review", Body: "Look.\n"},
@@ -139,7 +144,7 @@ func TestTasksFromDatabase(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	h := New(root, ps, "", "", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: root, Proposals: ps})
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/spec", nil))
@@ -164,5 +169,12 @@ func TestTasksFromDatabase(t *testing.T) {
 	}
 	if rec := post(h, "/api/tasks/t--orchestrator/status", `{"status":"finished"}`); rec.Code != http.StatusBadRequest {
 		t.Errorf("bad status: status %d, want 400", rec.Code)
+	}
+}
+
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if out, err := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=T", "-c", "user.email=t@example.com"}, args...)...).CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
 }

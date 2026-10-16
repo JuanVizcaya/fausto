@@ -40,7 +40,7 @@ func (s *Store) git(dir string, env []string, stdin []byte, args ...string) (str
 
 func (s *Store) gitBytes(dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
 	if dir == "" {
-		dir = s.Root
+		dir = s.Root()
 	}
 	cmd := exec.Command("git", append([]string{"-c", "safe.directory=*"}, args...)...)
 	cmd.Dir = dir
@@ -79,11 +79,18 @@ func parseIdent(ident string) (name, email string, ok bool) {
 }
 
 // author returns the identity recorded in proposals.
-func (s *Store) author() string {
-	if _, _, ok := parseIdent(s.Author); ok {
-		return s.Author
+func (s *Store) author() string { return Who(s.Root(), s.Author) }
+
+// Who is the identity changes are recorded under: author when it is
+// "Name <email>", else git's identity in the repository at root.
+func Who(root, author string) string {
+	if _, _, ok := parseIdent(author); ok {
+		return author
 	}
-	ident, err := s.git("", nil, nil, "var", "GIT_AUTHOR_IDENT")
+	cmd := exec.Command("git", "-c", "safe.directory=*", "var", "GIT_AUTHOR_IDENT")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	ident := strings.TrimSpace(string(out))
 	if err != nil {
 		return "unknown"
 	}
@@ -209,25 +216,6 @@ func (s *Store) commit(tree string, files edit.Files, parents []string, message 
 	}
 	args = append(args, "-F", "-")
 	return s.git("", nil, []byte(message), args...)
-}
-
-// worktreeFor returns the path of the work tree that has branch checked
-// out, or "".
-func (s *Store) worktreeFor(branch string) (string, error) {
-	out, err := s.git("", nil, nil, "worktree", "list", "--porcelain")
-	if err != nil {
-		return "", err
-	}
-	var path string
-	for _, line := range strings.Split(out, "\n") {
-		if p, ok := strings.CutPrefix(line, "worktree "); ok {
-			path = p
-		}
-		if line == "branch refs/heads/"+branch {
-			return path, nil
-		}
-	}
-	return "", nil
 }
 
 // Who is the identity changes are recorded under: Author, else git's.

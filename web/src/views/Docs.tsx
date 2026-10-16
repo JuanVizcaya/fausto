@@ -87,9 +87,11 @@ function Overview() {
   return (
     <>
       <p className="doc-prose">
-        fausto keeps <Code>system/</Code> and the code in step, runs the proposal workflow, and hands work to agents. It is one Go
-        binary used three ways: the orchestrator in a browser, agents from the command line, and CI for the drift checks. Git holds
-        only the spec and the code; proposals and tasks live in MongoDB, and Jira mirrors the tasks (ADR <Code>0004</Code>).
+        fausto keeps a project's <Code>system/</Code> and its code in step, runs the proposal workflow, and hands work to agents. It
+        is a tool of its own, one Go binary used three ways: the orchestrator in a browser, agents from the command line, and CI for
+        the drift checks. It works on each project only through its git repository, a local clone or one on GitHub, and never
+        commits to the base branch: an accepted proposal becomes a branch (a pull request on GitHub) that people merge. Projects,
+        proposals and tasks live in fausto's own MongoDB, deployed with it; Jira mirrors the tasks.
       </p>
       <Figure
         caption={
@@ -100,7 +102,7 @@ function Overview() {
           </>
         }
       >
-        <svg viewBox="0 0 1040 440" role="img" aria-label="fausto in the middle. The orchestrator uses its web UI over HTTP, agents run fausto task commands, and CI runs fausto check. fausto reads the git repository and commits to it once per accepted proposal, reads and writes proposals and tasks in MongoDB, and creates, attaches to and moves Jira issues while reading their status and assignee.">
+        <svg viewBox="0 0 1040 440" role="img" aria-label="fausto in the middle. The orchestrator uses its web UI over HTTP, agents run fausto task commands, and CI runs fausto check. fausto reads each project's git repository and puts every accepted proposal on a branch or pull request of its own, reads and writes projects, proposals and tasks in its MongoDB, and creates, attaches to and moves Jira issues while reading their status and assignee.">
           <Markers p="ov" />
           <Box x={20} y={58} w={200} h={64} name="Orchestrator" note="browser · localhost:7070" />
           <Box x={20} y={198} w={200} h={64} name="Agents" note="Claude Code, own worktree" />
@@ -110,10 +112,10 @@ function Overview() {
           <text className="t big" x={520} y={196} textAnchor="middle">fausto</text>
           <text className="s" x={520} y={218} textAnchor="middle">one Go binary · cmd/fausto</text>
           <text className="l mono" x={520} y={250} textAnchor="middle">serve · check · agents</text>
-          <text className="l mono" x={520} y={270} textAnchor="middle">task · jira sync · migrate</text>
+          <text className="l mono" x={520} y={270} textAnchor="middle">task · project · jira sync</text>
 
-          <Box x={820} y={58} w={200} h={64} name="Git repository" note="system/ · code · agent defs" kind="ext" />
-          <Box x={820} y={198} w={200} h={64} name="MongoDB" note="proposals · tasks · history" kind="hot" />
+          <Box x={820} y={58} w={200} h={64} name="Project repositories" note="local clone or GitHub" kind="ext" />
+          <Box x={820} y={198} w={200} h={64} name="MongoDB" note="fausto's own · deployed with it" kind="hot" />
           <Box x={820} y={338} w={200} h={64} name="Jira Cloud" note="an issue per task, .md attached" kind="ext" />
 
           <line className="wire" x1={220} y1={90} x2={398} y2={90} markerEnd={a} />
@@ -128,10 +130,10 @@ function Overview() {
 
           <line className="wire hot" x1={642} y1={90} x2={818} y2={90} markerEnd="url(#ov-h)" />
           <text className="l" x={730} y={80} textAnchor="middle">reads spec and code</text>
-          <text className="l hot" x={730} y={108} textAnchor="middle">1 commit per accept</text>
+          <text className="l hot" x={730} y={108} textAnchor="middle">a branch or PR per accept</text>
           <line className="wire" x1={642} y1={230} x2={818} y2={230} markerStart={a} markerEnd={a} />
           <text className="l" x={730} y={220} textAnchor="middle">reads and writes</text>
-          <text className="s" x={730} y={248} textAnchor="middle">source of truth</text>
+          <text className="s" x={730} y={248} textAnchor="middle">projects · proposals · tasks</text>
           <line className="wire" x1={642} y1={362} x2={818} y2={362} markerEnd={a} />
           <text className="l" x={730} y={352} textAnchor="middle">create · attach .md · move</text>
           <line className="wire dash" x1={818} y1={380} x2={642} y2={380} markerEnd={a} />
@@ -147,10 +149,11 @@ function CodeLayers() {
   return (
     <>
       <p className="doc-prose">
-        The workflow code depends on the <Code>store.Store</Code> interface, never on MongoDB. Only <Code>cmd/fausto</Code> opens{" "}
-        <Code>mongostore</Code> from <Code>FAUSTO_MONGO_URI</Code>; tests use <Code>memstore</Code>, and <Code>storetest</Code> holds
-        both to one contract. The spec side (<Code>spec</Code>, <Code>edit</Code>, <Code>check</Code>, <Code>agentdef</Code>) reads
-        files and never sees the database.
+        The workflow code depends on the <Code>store.Store</Code> interface, never on MongoDB, and on the <Code>source.Source</Code>{" "}
+        interface, never on where a repository lives. Only <Code>cmd/fausto</Code> opens <Code>mongostore</Code> from{" "}
+        <Code>FAUSTO_MONGO_URI</Code> and each project's source; tests use <Code>memstore</Code> and local repositories, and{" "}
+        <Code>storetest</Code> holds both stores to one contract. The spec side (<Code>spec</Code>, <Code>edit</Code>,{" "}
+        <Code>check</Code>, <Code>agentdef</Code>) reads files and never sees the database.
       </p>
       <Figure
         caption={
@@ -160,7 +163,7 @@ function CodeLayers() {
           </>
         }
       >
-        <svg viewBox="0 0 1060 480" role="img" aria-label="Package layers. cmd/fausto drives server, proposal and jira. server calls proposal and jira and lists tasks from store.Store. proposal stores proposals and tasks through store.Store and makes one commit per accept on the base branch. jira records issue keys through store.Store and talks to Jira Cloud. mongostore and memstore both implement store.Store; mongostore talks to MongoDB.">
+        <svg viewBox="0 0 1060 480" role="img" aria-label="Package layers. cmd/fausto drives server, proposal and jira. server calls proposal and jira and lists tasks from store.Store. proposal stores proposals and tasks through store.Store and puts each accepted proposal on a branch or pull request through source. jira records issue keys through store.Store and talks to Jira Cloud. mongostore and memstore both implement store.Store; mongostore talks to MongoDB.">
           <Markers p="cl" />
           <text className="head" x={20} y={60}>entry</text>
           <text className="head" x={20} y={180}>workflow</text>
@@ -171,18 +174,18 @@ function CodeLayers() {
           <line className="rule" x1={20} y1={380} x2={1040} y2={380} />
 
           <Box x={450} y={30} w={160} name="cmd/fausto" note="CLI · opens the store" center />
-          <Box x={220} y={150} w={160} name="proposal" note="review · accept · migrate" center />
+          <Box x={220} y={150} w={160} name="proposal" note="review · accept · sync" center />
           <Box x={450} y={150} w={160} name="server" note="web UI · /api" center />
           <Box x={680} y={150} w={160} name="jira" note="issue mirror" center />
           <Box x={900} y={150} w={140} name="Jira Cloud" note="REST v3" kind="ext" center />
-          <Box x={220} y={290} w={160} name="git" note="base branch" kind="ext" center />
+          <Box x={220} y={290} w={160} name="source" note="local clone · GitHub" kind="ext" center />
           <Box x={450} y={290} w={160} name="store.Store" note="interface" kind="iface" center />
           <Box x={680} y={290} w={160} name="mongostore" note="driver v2" center />
           <Box x={450} y={410} w={160} name="memstore" note="in memory · tests" center />
-          <Box x={680} y={410} w={160} name="MongoDB" note="fausto/compose.yaml" kind="hot" center />
+          <Box x={680} y={410} w={160} name="MongoDB" note="compose.yaml" kind="hot" center />
 
           <line className="wire" x1={485} y1={82} x2={340} y2={148} markerEnd={a} />
-          <text className="l" x={402} y={106} textAnchor="end">migrate</text>
+          <text className="l" x={402} y={106} textAnchor="end">project</text>
           <line className="wire" x1={530} y1={82} x2={530} y2={148} markerEnd={a} />
           <text className="l" x={538} y={122}>serve</text>
           <line className="wire" x1={575} y1={82} x2={720} y2={148} markerEnd={a} />
@@ -195,7 +198,7 @@ function CodeLayers() {
           <line className="wire" x1={840} y1={176} x2={898} y2={176} markerEnd={a} />
 
           <line className="wire hot" x1={300} y1={202} x2={300} y2={288} markerEnd="url(#cl-h)" />
-          <text className="l hot" x={292} y={250} textAnchor="end">commit per accept</text>
+          <text className="l hot" x={292} y={250} textAnchor="end">branch or PR per accept</text>
           <line className="wire" x1={360} y1={202} x2={470} y2={288} markerEnd={a} />
           <text className="l" x={420} y={234}>proposals, tasks</text>
           <line className="wire" x1={530} y1={202} x2={530} y2={288} markerEnd={a} />
@@ -216,15 +219,16 @@ function CodeLayers() {
 }
 
 const steps = [
-  { x: 300, head: "1 · propose", who: "orchestrator, web UI" },
-  { x: 460, head: "2 · review", who: "orchestrator, web UI" },
-  { x: 620, head: "3 · accept", who: "orchestrator, web UI" },
-  { x: 780, head: "4 · pull", who: "agent, CLI" },
-  { x: 940, head: "5 · start, done", who: "agent, CLI" },
+  { x: 280, head: "1 · propose", who: "orchestrator, web UI" },
+  { x: 410, head: "2 · review", who: "orchestrator, web UI" },
+  { x: 540, head: "3 · accept", who: "orchestrator, web UI" },
+  { x: 670, head: "4 · merge", who: "people, git or GitHub" },
+  { x: 810, head: "5 · pull", who: "agent, CLI" },
+  { x: 950, head: "6 · start, done", who: "agent, CLI" },
 ];
 
 const lanes = [
-  { y: 110, name: "git", note: "base branch" },
+  { y: 110, name: "git", note: "the project's repo" },
   { y: 180, name: "MongoDB", note: "proposals, tasks" },
   { y: 250, name: "Jira", note: "mirror" },
   { y: 320, name: ".fausto/tasks/", note: "agent worktree, ignored" },
@@ -232,25 +236,28 @@ const lanes = [
 
 /** Each cell: the step (by x), the lane (by y), whether it writes, and what. */
 const cells: { x: number; y: number; writes: boolean; text: string; hot?: boolean }[] = [
-  { x: 300, y: 110, writes: false, text: "reads base" },
-  { x: 300, y: 180, writes: true, text: "proposal + its edits" },
-  { x: 460, y: 110, writes: false, text: "re-applies to current base" },
-  { x: 460, y: 180, writes: false, text: "reads the edits" },
-  { x: 620, y: 110, writes: true, text: "1 commit, system/ only", hot: true },
-  { x: 620, y: 180, writes: true, text: "tasks · proposal accepted" },
-  { x: 620, y: 250, writes: true, text: "issue + <id>.md" },
-  { x: 780, y: 180, writes: false, text: "open tasks" },
-  { x: 780, y: 320, writes: true, text: "writes <id>.md" },
-  { x: 940, y: 180, writes: true, text: "status + who, when" },
-  { x: 940, y: 250, writes: true, text: "transitions issue" },
+  { x: 280, y: 110, writes: false, text: "reads base" },
+  { x: 280, y: 180, writes: true, text: "proposal + edits" },
+  { x: 410, y: 110, writes: false, text: "applies to base" },
+  { x: 410, y: 180, writes: false, text: "reads the edits" },
+  { x: 540, y: 110, writes: true, text: "branch (or PR)", hot: true },
+  { x: 540, y: 180, writes: true, text: "accepted" },
+  { x: 670, y: 110, writes: true, text: "into the base", hot: true },
+  { x: 670, y: 180, writes: true, text: "applied · tasks" },
+  { x: 670, y: 250, writes: true, text: "issue + <id>.md" },
+  { x: 810, y: 180, writes: false, text: "open tasks" },
+  { x: 810, y: 320, writes: true, text: "writes <id>.md" },
+  { x: 950, y: 180, writes: true, text: "status + who" },
+  { x: 950, y: 250, writes: true, text: "moves issue" },
 ];
 
 function Workflow() {
   return (
     <>
       <p className="doc-prose">
-        What each step reads and writes. Git changes in exactly one column; everything before and after happens in the database and
-        Jira, so proposing, reviewing and working tasks never touches the repository.
+        What each step reads and writes. fausto never commits to the base branch: accepting puts the spec change on a branch of its
+        own (a pull request, on GitHub), and people merge it. fausto notices the merge, marks the proposal applied and creates its
+        tasks; until then agents get nothing, so they always work against a merged spec.
       </p>
       <Figure
         caption={
@@ -266,8 +273,8 @@ function Workflow() {
           </>
         }
       >
-        <svg viewBox="0 0 1060 380" role="img" aria-label="Five steps across four stores. Propose writes the proposal with its edits to MongoDB. Review re-applies the edits to the current base. Accept writes one commit to git touching system only, writes tasks to MongoDB and creates Jira issues with the .md attached. Pull writes .md files into .fausto/tasks. Start and done write the status and history to MongoDB and transition the Jira issue.">
-          <rect className="band" x={545} y={66} width={150} height={300} rx={6} />
+        <svg viewBox="0 0 1060 380" role="img" aria-label="Six steps across four stores. Propose writes the proposal with its edits to MongoDB. Review applies the edits to the current base. Accept puts one commit touching system only on a branch of its own, or a pull request, and marks the proposal accepted. People merge it into the base; fausto then marks the proposal applied, creates its tasks in MongoDB and their Jira issues with the .md attached. Pull writes .md files into .fausto/tasks. Start and done write the status and history to MongoDB and move the Jira issue.">
+          <rect className="band" x={475} y={66} width={260} height={300} rx={6} />
           {steps.map((s) => (
             <g key={s.x}>
               <text className="head" x={s.x} y={34} textAnchor="middle">{s.head}</text>
@@ -296,19 +303,22 @@ function Workflow() {
 const commands: [string, string][] = [
   ["fausto check", "Drift checks: the code against system/. No database needed; CI runs it."],
   ["fausto agents", "Regenerate .claude/agents/*.md and .github/CODEOWNERS from the agent charters."],
-  ["fausto serve", "This UI. Editing needs a base branch, a git identity and the database."],
+  ["fausto serve", "This UI, for every project (or only -root). Editing needs the database and a git identity."],
+  ["fausto project add <id> -path <clone> | -github owner/repo", "Register a project; list and rm show and remove them."],
   ["fausto task pull <agent>", "Write the agent's open tasks to .fausto/tasks/ and remove closed ones."],
   ["fausto task start | done | drop <id>", "Change a task's status, record who did it, and move its Jira issue."],
   ["fausto task list [-agent a] [-status s]", "List tasks from the database."],
   ["fausto jira sync [-dry-run]", "Create missing issues, attach each task's .md, and move issues to the task's status."],
-  ["fausto migrate [-dry-run]", "One-off: move tasks/ and system/proposals/ from git into the database."],
 ];
 
 const settings: [string, string][] = [
-  ["FAUSTO_MONGO_URI", "The shared database. Without it, fausto is read-only and the task commands don't run."],
+  ["FAUSTO_MONGO_URI", "fausto's database; compose.yaml runs it with fausto. Without it, fausto is read-only and the task commands don't run."],
   ["FAUSTO_MONGO_DB", "Database name; defaults to fausto."],
-  ["FAUSTO_AUTHOR", "\"Name <email>\" for accept commits and task history; defaults to git's identity."],
-  ["FAUSTO_BASE", "Branch proposals apply to; defaults to the checked-out branch."],
+  ["FAUSTO_PROJECT", "The project a command works on; defaults to the clone it runs in, or the only one."],
+  ["FAUSTO_GITHUB_TOKEN", "For projects on GitHub: pushes proposal branches and opens pull requests (contents and pull requests, read and write)."],
+  ["FAUSTO_DATA", "Where fausto keeps its clones of GitHub projects; defaults to the user cache directory."],
+  ["FAUSTO_AUTHOR", "\"Name <email>\" for proposal commits and task history; defaults to git's identity."],
+  ["FAUSTO_POLL", "How often to check accepted proposals for a merge; defaults to 1m."],
   ["FAUSTO_JIRA_URL, _EMAIL, _TOKEN, _PROJECT", "Turn on the Jira mirror. _STATUSES and _ISSUE_TYPE are optional."],
 ];
 
@@ -316,8 +326,9 @@ function Commands() {
   return (
     <>
       <p className="doc-prose">
-        Run these from <Code>fausto/</Code> as <Code>go run ./cmd/fausto …</Code>, or through the fausto container. Settings come from
-        the environment; with docker compose, put them in <Code>.env</Code> (<Code>.env.example</Code> lists them).
+        Install fausto with <Code>go install github.com/JuanVizcaya/fausto/cmd/fausto@latest</Code> and run it in a project's clone,
+        or through the <Code>ghcr.io/juanvizcaya/fausto</Code> image. Settings come from the environment; with docker compose, put
+        them in <Code>.env</Code> (<Code>.env.example</Code> lists them).
       </p>
       <div className="doc-tables">
         <table className="doc-table">

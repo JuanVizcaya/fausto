@@ -12,10 +12,7 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/spec"
 )
 
-const (
-	composeFile = "compose.yaml"
-	commandsDir = "backend/cmd"
-)
+const ()
 
 type composeService struct {
 	// File is the compose file that defines the service: compose.yaml or
@@ -111,7 +108,7 @@ func (r *Repo) loadCompose() (map[string]composeService, error) {
 		}
 		return nil
 	}
-	if err := load(composeFile); err != nil {
+	if err := load(r.Spec.Layout.ComposeFile); err != nil {
 		return nil, err
 	}
 	for name, s := range services {
@@ -140,9 +137,11 @@ func (s composeService) envValues() []string {
 	return out
 }
 
-// commandDirs returns the directories under backend/cmd that contain Go files.
+// commandDirs returns the directories under the layout's commands
+// directory that contain Go files.
 func (r *Repo) commandDirs() map[string]bool {
 	dirs := map[string]bool{}
+	commandsDir := r.Spec.Layout.CommandsDir
 	for _, f := range r.filesUnder(commandsDir) {
 		if strings.HasSuffix(f, ".go") && path.Dir(path.Dir(f)) == commandsDir {
 			dirs[path.Dir(f)] = true
@@ -155,7 +154,7 @@ func checkServices(r *Repo) []Finding {
 	var out []Finding
 	compose, err := r.loadCompose()
 	if err != nil {
-		return []Finding{{Message: err.Error(), Path: composeFile}}
+		return []Finding{{Message: err.Error(), Path: r.Spec.Layout.ComposeFile}}
 	}
 	cmds := r.commandDirs()
 	claimedCmd := map[string]string{}
@@ -180,7 +179,7 @@ func checkServices(r *Repo) []Finding {
 			}
 			claimedCompose[name] = c.ID
 			if _, ok := compose[name]; active && !ok {
-				out = append(out, Finding{Message: fmt.Sprintf("declared compose service %q is missing from %s and the files it includes", name, composeFile), Component: c.ID, Path: composeFile})
+				out = append(out, Finding{Message: fmt.Sprintf("declared compose service %q is missing from %s and the files it includes", name, r.Spec.Layout.ComposeFile), Component: c.ID, Path: r.Spec.Layout.ComposeFile})
 			}
 		} else if active && runs {
 			out = append(out, Finding{Message: "active " + c.Kind + " must declare runtime.compose", Component: c.ID})
@@ -226,7 +225,7 @@ func checkDBOwnership(r *Repo) []Finding {
 	// Runtime level: only the owner's compose service connects to the database.
 	compose, err := r.loadCompose()
 	if err != nil {
-		return append(out, Finding{Message: err.Error(), Path: composeFile})
+		return append(out, Finding{Message: err.Error(), Path: r.Spec.Layout.ComposeFile})
 	}
 	byCompose := map[string]*spec.Component{}
 	for i := range s.System.Components {

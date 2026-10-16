@@ -221,9 +221,27 @@ export interface JiraOutcome {
   error?: string;
 }
 
+/** A project fausto serves, from /api/projects. */
+export interface ProjectInfo {
+  id: string;
+  name: string;
+  /** A local path, or "github.com/owner/repo". */
+  source: string;
+  /** Why the project couldn't be opened. */
+  error?: string;
+}
+
+/** What syncing accepted proposals with their reviews did. */
+export interface SyncReport {
+  results: { proposal: string; status?: Proposal["status"]; tasks?: string[]; error?: string }[];
+  jiraSync?: JiraOutcome;
+}
+
 export interface Info {
   editable: boolean;
   base?: string;
+  /** Where accepted proposals go: a pull request on GitHub, or a branch of a local clone. */
+  source?: "github" | "local";
   /** Why editing is off, when it is. */
   readonlyReason?: string;
   /** The repository's GitHub URL, e.g. "https://github.com/owner/repo". */
@@ -278,14 +296,27 @@ export interface Proposal {
   description: string;
   author: string;
   created: string;
-  status: "open" | "accepted" | "rejected";
+  /** accepted: its change is on a branch (and in a pull request on
+   * GitHub) waiting to be merged; applied: merged, and its tasks created;
+   * withdrawn: its pull request was closed without merging. */
+  status: "open" | "accepted" | "applied" | "rejected" | "withdrawn";
   milestone?: string;
   accepted?: string;
+  applied?: string;
+  /** When it was rejected or withdrawn. */
+  closed?: string;
+  /** The tasks applying it created. */
   tasks: string[];
   /** The base branch commit it was made against. */
   baseCommit?: string;
-  /** The commit that applied it, once accepted. */
+  /** The commit with its spec change, once accepted. */
   commit?: string;
+  /** The branch holding commit, and its pull request on GitHub. */
+  branch?: string;
+  pr?: number;
+  url?: string;
+  /** The base branch commit that merged it, when known. */
+  merged?: string;
   /** Imported from git without its edits. */
   legacy?: boolean;
   updated: string;

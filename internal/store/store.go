@@ -1,8 +1,8 @@
 // Package store keeps fausto's workflow state, proposals and the tasks they
 // create, outside git. Git holds only the spec and the code; a proposal
-// stores the edits it makes to the spec, and accepting it commits just those.
-// Store is implemented by memstore (tests) and mongostore (a shared
-// MongoDB).
+// stores the edits it makes to the spec, and accepting it puts just those on
+// a branch for review. Store is implemented by memstore (tests) and
+// mongostore (fausto's MongoDB); each project fausto works on has its own.
 package store
 
 import (
@@ -30,8 +30,17 @@ var (
 // Statuses a task may have.
 var TaskStatuses = []string{"open", "in-progress", "done", "dropped"}
 
-// Statuses a proposal may have.
-var ProposalStatuses = []string{"open", "accepted", "rejected"}
+// Statuses a proposal may have. An open proposal is accepted (its change is
+// on a branch, or in a pull request, waiting to be merged) or rejected; an
+// accepted one is applied once its change is in the base branch, or
+// withdrawn if its pull request is closed without merging.
+var ProposalStatuses = []string{"open", "accepted", "applied", "rejected", "withdrawn"}
+
+// ProposalMoves are the status changes a proposal may make.
+var ProposalMoves = map[string][]string{
+	"open":     {"accepted", "rejected"},
+	"accepted": {"applied", "withdrawn"},
+}
 
 // Proposal is a proposed change to the spec: the edits it makes, and what
 // became of it.
@@ -43,16 +52,118 @@ type Proposal struct {
 	Created     string `json:"created" bson:"created"` // YYYY-MM-DD
 	Status      string `json:"status" bson:"status"`
 	Milestone   string `json:"milestone,omitempty" bson:"milestone,omitempty"`
-	Accepted    string `json:"accepted,omitempty" bson:"accepted,omitempty"`
+	// Dates (YYYY-MM-DD) of the status changes.
+	Accepted string `json:"accepted,omitempty" bson:"accepted,omitempty"`
+	Applied  string `json:"applied,omitempty" bson:"applied,omitempty"`
+	Closed   string `json:"closed,omitempty" bson:"closed,omitempty"` // rejected or withdrawn
 	// BaseCommit is the base branch commit the proposal was made against.
 	BaseCommit string `json:"baseCommit,omitempty" bson:"baseCommit,omitempty"`
-	// Commit is the commit that applied the proposal, once accepted.
-	Commit  string        `json:"commit,omitempty" bson:"commit,omitempty"`
+	// Commit is the commit with the proposal's spec change, once accepted.
+	Commit string `json:"commit,omitempty" bson:"commit,omitempty"`
+	// Branch holds Commit for review; PR and URL are its pull request, when
+	// the project is on GitHub.
+	Branch string `json:"branch,omitempty" bson:"branch,omitempty"`
+	PR     int    `json:"pr,omitempty" bson:"pr,omitempty"`
+	URL    string `json:"url,omitempty" bson:"url,omitempty"`
+	// Merged is the base branch commit that brought the change in, once
+	// applied, when known.
+	Merged  string        `json:"merged,omitempty" bson:"merged,omitempty"`
 	Changes []edit.Change `json:"-" bson:"changes"`
-	Tasks   []string      `json:"tasks" bson:"tasks"`
+	// Tasks are the ids of the tasks created when the proposal was applied;
+	// PendingTasks are the tasks accepting it planned, created on apply.
+	Tasks        []string `json:"tasks" bson:"tasks"`
+	PendingTasks []Task   `json:"-" bson:"pendingTasks,omitempty"`
 	// Legacy marks a proposal imported from git, whose edits weren't kept.
 	Legacy  bool      `json:"legacy,omitempty" bson:"legacy,omitempty"`
 	Updated time.Time `json:"updated" bson:"updated"`
+}
+
+// ProposalUpdate is what a proposal's status change records. Date goes to
+// the field for the new status (Accepted, Applied or Closed); empty fields
+// leave what the proposal has.
+type ProposalUpdate struct {
+	Date         string
+	Commit       string
+	Branch       string
+	PR           int
+	URL          string
+	Merged       string
+	Tasks        []string
+	PendingTasks []Task
+}
+
+// Apply records the move to status to with u on p.
+func (u ProposalUpdate) Apply(p *Proposal, to string) {
+	p.Status = to
+	switch to {
+	case "accepted":
+		p.Accepted = u.Date
+	case "applied":
+		p.Applied = u.Date
+	default:
+		p.Closed = u.Date
+	}
+	set := func(dst *string, v string) {
+		if v != "" {
+			*dst = v
+		}
+	}
+	set(&p.Commit, u.Commit)
+	set(&p.Branch, u.Branch)
+	set(&p.URL, u.URL)
+	set(&p.Merged, u.Merged)
+	if u.PR != 0 {
+		p.PR = u.PR
+	}
+	if u.Tasks != nil {
+		p.Tasks = append([]string{}, u.Tasks...)
+	}
+	if u.PendingTasks != nil {
+		p.PendingTasks = append([]Task{}, u.PendingTasks...)
+	}
+}
+
+// ValidMove returns an error unless a proposal may move from status from to
+// status to.
+func ValidMove(from, to string) error {
+	if !slices.Contains(ProposalMoves[from], to) {
+		return fmt.Errorf("a proposal can't move from %s to %s", from, to)
+	}
+	return nil
+}
+
+// Project is a repository fausto works on.
+type Project struct {
+	ID   string `json:"id" bson:"_id"`
+	Name string `json:"name" bson:"name"`
+	// Exactly one of Path (a local clone) and GitHub ("owner/repo").
+	Path   string `json:"path,omitempty" bson:"path,omitempty"`
+	GitHub string `json:"github,omitempty" bson:"github,omitempty"`
+	// Base is the branch proposals target; empty means the checked-out
+	// branch for a local clone, the default branch for GitHub.
+	Base    string    `json:"base,omitempty" bson:"base,omitempty"`
+	Updated time.Time `json:"updated" bson:"updated"`
+}
+
+// Projects keeps the projects fausto works on, each with its own Store.
+type Projects interface {
+	Projects(ctx context.Context) ([]Project, error)
+	Project(ctx context.Context, id string) (*Project, error)
+	// PutProject adds or replaces a project.
+	PutProject(ctx context.Context, p *Project) error
+	// DeleteProject removes a project, not its proposals and tasks.
+	DeleteProject(ctx context.Context, id string) error
+	// Store is the proposals and tasks of project id.
+	Store(id string) Store
+	Close(ctx context.Context) error
+}
+
+// ValidProjectID returns an error unless id is a lowercase slug.
+func ValidProjectID(id string) error {
+	if id == "" || len(id) > 40 || strings.Trim(id, "abcdefghijklmnopqrstuvwxyz0123456789-") != "" || id[0] == '-' {
+		return fmt.Errorf("project id %q: use lowercase letters, digits and dashes", id)
+	}
+	return nil
 }
 
 // Task is work assigned to an agent or a person.
@@ -103,10 +214,10 @@ type Store interface {
 	Proposal(ctx context.Context, id string) (*Proposal, error)
 	// Proposals returns all proposals, newest first.
 	Proposals(ctx context.Context) ([]Proposal, error)
-	// CloseProposal moves an open proposal to status (accepted or
-	// rejected), recording its tasks and commit; ErrChanged if it isn't
-	// open anymore.
-	CloseProposal(ctx context.Context, id, status, date, commit string, tasks []string) error
+	// MoveProposal moves a proposal from status from to status to (one of
+	// ProposalMoves), recording u; ErrChanged if its status isn't from
+	// anymore.
+	MoveProposal(ctx context.Context, id, from, to string, u ProposalUpdate) error
 
 	// CreateTasks adds tasks; ErrExists (and nothing added) if an id is
 	// taken.
@@ -152,6 +263,11 @@ func SortProposals(ps []Proposal) {
 		}
 		return strings.Compare(b.ID, a.ID)
 	})
+}
+
+// SortProjects orders projects by id.
+func SortProjects(ps []Project) {
+	slices.SortFunc(ps, func(a, b Project) int { return strings.Compare(a.ID, b.ID) })
 }
 
 // taskFront is a task's front matter, in the order task files had it.

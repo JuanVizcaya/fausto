@@ -32,6 +32,8 @@ type Spec struct {
 	Events       Events
 	Agents       []Agent
 	Decisions    []Decision
+	// Layout is where the project keeps its code (see LayoutFile).
+	Layout Layout
 	// Documents holds every file in JSON-compatible form, for schema validation.
 	Documents []Document
 }
@@ -225,14 +227,15 @@ type Event struct {
 	Delivery string `json:"delivery,omitempty"`
 }
 
-// ProtoDir returns the directory of the event's protobuf package and the
-// message name: proto/habyta/residents/events/v1 and ResidentRegistered.
-func (e *Event) ProtoDir() (dir, message string) {
+// ProtoDir returns the directory of the event's protobuf package under
+// protoRoot and the message name: proto/habyta/residents/events/v1 and
+// ResidentRegistered.
+func (e *Event) ProtoDir(protoRoot string) (dir, message string) {
 	i := strings.LastIndex(e.Message, ".")
 	if i < 0 {
 		return "", e.Message
 	}
-	return "proto/" + strings.ReplaceAll(e.Message[:i], ".", "/"), e.Message[i+1:]
+	return protoRoot + "/" + strings.ReplaceAll(e.Message[:i], ".", "/"), e.Message[i+1:]
 }
 
 // Consumes reports whether component id consumes an event from producer.
@@ -350,6 +353,9 @@ func (c *Component) Uses(target string, protocols ...string) bool {
 func Load(root string) (*Spec, error) {
 	s := &Spec{}
 	var errs []error
+	layout, err := LoadLayout(root)
+	s.Layout = layout
+	errs = append(errs, err)
 	single := []struct {
 		name, schema string
 		out          any

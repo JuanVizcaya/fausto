@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ViewProps } from "../App";
-import { approveProposal, fetchProposal, jiraProblem, rejectProposal } from "../api";
+import { approveProposal, fetchProposal, jiraProblem, rejectProposal, syncProposals } from "../api";
 import type { Proposal, ProposalDetail } from "../types";
 import { Code, Empty, Markdown, Section, StatusPill } from "../ui";
 
 type StatusFilter = Proposal["status"] | "all";
 
+/** The date a proposal last changed status. */
+const lastDate = (p: Proposal) => p.applied ?? p.closed ?? p.accepted ?? p.created;
+
 /** "Name <email>" → "Name". */
 const authorName = (author: string) => author.replace(/\s*<[^>]*>\s*$/, "") || author;
 
-export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) {
+export function ProposalsView({ spec, proposals, item, go, reload, info }: ViewProps) {
   const anyOpen = proposals.some((p) => p.status === "open");
   const [query, setQuery] = useState("");
   // Open proposals are what needs attention; without any, show them all.
@@ -19,7 +22,7 @@ export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) 
   const sorted = useMemo(
     () =>
       [...proposals].sort(
-        (a, b) => Number(b.status === "open") - Number(a.status === "open") || (b.accepted ?? b.created).localeCompare(a.accepted ?? a.created),
+        (a, b) => Number(b.status === "open") - Number(a.status === "open") || lastDate(b).localeCompare(lastDate(a)),
       ),
     [proposals],
   );
@@ -47,7 +50,9 @@ export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) 
       <Section title="Proposals">
         <p className="lede">
           Changes to <Code>system/</Code> are proposed here and kept in fausto's database, checked against the base branch as it is now,
-          and accepted or rejected by a human. Accepting one commits just the spec change and gives each affected agent a task.
+          and accepted or rejected by a human. Accepting one puts just the spec change on a branch of its own (in a pull request, for a
+          project on GitHub) for people to merge; fausto never commits to the base branch. Once it is merged the proposal is applied and
+          each affected agent gets a task.
         </p>
         <div className="filters" role="search">
           <input
@@ -62,11 +67,15 @@ export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) 
             {(
               [
                 ["open", "Open"],
-                ["accepted", "Accepted"],
+                ["accepted", "Waiting for merge"],
+                ["applied", "Applied"],
                 ["rejected", "Rejected"],
+                ["withdrawn", "Withdrawn"],
                 ["all", "All"],
               ] as const
-            ).map(([k, label]) => (
+            )
+              .filter(([k]) => k !== "withdrawn" || count(k) > 0)
+              .map(([k, label]) => (
               <button key={k} role="radio" aria-checked={status === k} className={status === k ? "active" : ""} onClick={() => setStatus(k)}>
                 {label} {count(k)}
               </button>
@@ -107,9 +116,10 @@ export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) 
                     <span className="agent-main">
                       <span className="agent-name">{p.title}</span>
                       <span className="agent-scope">
-                        {authorName(p.author)} · {p.status === "accepted" && p.accepted ? `accepted ${p.accepted}` : p.created}
+                        {authorName(p.author)} · {p.status === "open" ? p.created : `${p.status} ${lastDate(p)}`}
                         {m && ` · ${m.title}`}
-                        {p.status === "accepted" && ` · ${p.tasks.length} ${p.tasks.length === 1 ? "task" : "tasks"}`}
+                        {p.status === "accepted" && (p.pr ? ` · PR #${p.pr}` : " · waiting for merge")}
+                        {p.status === "applied" && ` · ${p.tasks.length} ${p.tasks.length === 1 ? "task" : "tasks"}`}
                       </span>
                     </span>
                     <span className="agent-stats">
@@ -132,7 +142,7 @@ export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) 
       </Section>
       <aside className="detail">
         {selected ? (
-          <ProposalDetailView key={selected.id} id={selected.id} {...{ spec, go, reload }} />
+          <ProposalDetailView key={selected.id} id={selected.id} {...{ spec, go, reload, info }} />
         ) : (
           <Empty>{anyOpen ? "Select a proposal to review it." : "Select a proposal to see what it changed."}</Empty>
         )}
@@ -141,7 +151,7 @@ export function ProposalsView({ spec, proposals, item, go, reload }: ViewProps) 
   );
 }
 
-function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<ViewProps, "spec" | "go" | "reload">) {
+function ProposalDetailView({ id, spec, go, reload, info }: { id: string } & Pick<ViewProps, "spec" | "go" | "reload" | "info">) {
   const [d, setD] = useState<ProposalDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"approve" | "reject" | null>(null);
@@ -159,11 +169,17 @@ function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<View
     load();
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const act = async (action: "approve" | "reject") => {
+  const act = async (action: "approve" | "reject" | "sync") => {
     setBusy(true);
     try {
-      if (action === "approve") setJiraWarning(jiraProblem((await approveProposal(id)).jiraSync));
-      else await rejectProposal(id);
+      if (action === "approve") await approveProposal(id);
+      else if (action === "reject") await rejectProposal(id);
+      else {
+        const r = await syncProposals();
+        setJiraWarning(jiraProblem(r.jiraSync));
+        const mine = r.results.find((x) => x.proposal === id);
+        if (mine?.error) setError(mine.error);
+      }
       setConfirm(null);
       await reload();
       await load();
@@ -192,13 +208,10 @@ function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<View
             {" "}· made against <Code>{d.baseCommit.slice(0, 12)}</Code>
           </>
         )}
-        {d.commit && (
-          <>
-            {" "}· applied in <Code>{d.commit.slice(0, 12)}</Code>
-          </>
-        )}
         {d.legacy && " · imported from git"}
         {d.accepted && ` · accepted ${d.accepted}`}
+        {d.applied && ` · applied ${d.applied}`}
+        {d.closed && ` · ${d.status} ${d.closed}`}
         {d.milestone && (
           <>
             {" "}· milestone{" "}
@@ -210,8 +223,45 @@ function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<View
       {error && <div className="banner bad">{error}</div>}
       {jiraWarning && (
         <div className="banner warn">
-          Accepted, but its tasks are not all in Jira yet ({jiraWarning}). Retry with Sync with Jira on the{" "}
+          Applied, but its tasks are not all in Jira yet ({jiraWarning}). Retry with Sync with Jira on the{" "}
           <a href="#/tasks">Tasks</a> tab.
+        </div>
+      )}
+      {(d.status === "accepted" || d.status === "applied" || d.status === "withdrawn") && d.branch && (
+        <div className={d.status === "accepted" ? "banner info review" : "review muted small"}>
+          <span>
+            {d.status === "accepted" ? "Waiting for merge: " : "Reviewed in "}
+            {d.url ? (
+              <a href={d.url} target="_blank" rel="noreferrer">
+                pull request #{d.pr}
+              </a>
+            ) : (
+              <>
+                branch <Code>{d.branch}</Code>
+              </>
+            )}
+            {d.commit && (
+              <>
+                {" "}(<Code>{d.commit.slice(0, 12)}</Code> on <Code>{d.base}</Code>)
+              </>
+            )}
+            {d.merged && (
+              <>
+                , merged in <Code>{d.merged.slice(0, 12)}</Code>
+              </>
+            )}
+            .
+            {d.status === "accepted" && !d.url && (
+              <>
+                {" "}Merge it with <Code>git merge {d.branch}</Code>; its tasks are created then.
+              </>
+            )}
+          </span>
+          {d.status === "accepted" && (
+            <button className="btn btn-small" disabled={busy} onClick={() => act("sync")}>
+              {busy ? "Checking…" : "Check for merge"}
+            </button>
+          )}
         </div>
       )}
 
@@ -222,10 +272,13 @@ function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<View
           ) : confirm === "approve" ? (
             <>
               <span>
-                Merge into <Code>{d.base}</Code> and create {(d.plans ?? []).length} {(d.plans ?? []).length === 1 ? "task" : "tasks"}?
+                Put the change on branch <Code>fausto-proposal/{d.id}</Code>
+                {info?.source === "github" ? <> in a pull request into </> : <> for merging into </>}
+                <Code>{d.base}</Code>? Its {(d.plans ?? []).length} {(d.plans ?? []).length === 1 ? "task is" : "tasks are"} created once
+                it is merged.
               </span>
               <button className="btn btn-primary" disabled={busy} onClick={() => act("approve")}>
-                {busy ? "Merging…" : "Confirm accept"}
+                {busy ? "Accepting…" : "Confirm accept"}
               </button>
               <button className="btn" onClick={() => setConfirm(null)}>
                 Cancel
@@ -256,7 +309,7 @@ function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<View
         </div>
       )}
 
-      {d.status === "accepted" ? (
+      {d.status === "applied" ? (
         <>
           <h3 className="sub">Tasks created</h3>
           {d.tasks.length === 0 ? (
@@ -291,7 +344,9 @@ function ProposalDetailView({ id, spec, go, reload }: { id: string } & Pick<View
             </ul>
           )}
 
-          <h3 className="sub">{d.status === "open" ? "Tasks on accept" : "Tasks it would have created"}</h3>
+          <h3 className="sub">
+            {d.status === "open" ? "Tasks once merged" : d.status === "accepted" ? "Tasks created when it is merged" : "Tasks it would have created"}
+          </h3>
           {(d.plans ?? []).length === 0 ? (
             <Empty>No agent is affected.</Empty>
           ) : (

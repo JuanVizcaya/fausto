@@ -56,7 +56,7 @@ func checkContracts(r *Repo) []Finding {
 	}
 	// Active events need their message in the producer's contract.
 	for _, e := range r.Spec.Events.Events {
-		dir, message := e.ProtoDir()
+		dir, message := e.ProtoDir(r.Spec.Layout.ProtoRoot)
 		if e.Status != "active" || !declared[dir] {
 			continue // undeclared packages are reported by the schema check
 		}

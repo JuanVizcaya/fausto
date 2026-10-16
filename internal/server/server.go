@@ -4,6 +4,7 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/jira"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
 	"github.com/JuanVizcaya/fausto/internal/schema"
+	"github.com/JuanVizcaya/fausto/internal/source"
 	"github.com/JuanVizcaya/fausto/internal/spec"
 	"github.com/JuanVizcaya/fausto/internal/store"
 )
@@ -27,13 +29,39 @@ import (
 //go:embed dist
 var dist embed.FS
 
-// New returns a handler for the repository at root. proposals may be nil,
-// which disables editing (for example outside a git repository); readonly
-// then says why and how to enable it, for the UI to show. repo is the
-// repository's GitHub URL (e.g. "https://github.com/CMOT/habyta"), for the
-// UI to link into; empty when it couldn't be resolved. jc, when set, mirrors
-// tasks as Jira issues.
-func New(root string, proposals *proposal.Store, readonly string, repo string, jc *jira.Client, logger *slog.Logger) http.Handler {
+// Options configures the handler for one project.
+type Options struct {
+	// Root is the project's work tree.
+	Root string
+	// Proposals may be nil, which disables editing (for example without a
+	// database); Readonly then says why and how to enable it, for the UI
+	// to show.
+	Proposals *proposal.Store
+	Readonly  string
+	// Repo is the repository's GitHub URL (e.g.
+	// "https://github.com/owner/repo"), for the UI to link into; empty
+	// when it couldn't be resolved.
+	Repo string
+	// Jira, when set, mirrors tasks as Jira issues.
+	Jira   *jira.Client
+	Logger *slog.Logger
+	// Poll, when positive, is how often accepted proposals are checked for
+	// a merge in the background, for as long as ctx lasts (see Start).
+	Poll time.Duration
+}
+
+// Handler serves one project.
+type Handler struct {
+	http.Handler
+	sync *syncer
+}
+
+// New returns a handler for the project o describes.
+func New(o Options) *Handler {
+	root, proposals, readonly, repo, jc, logger := o.Root, o.Proposals, o.Readonly, o.Repo, o.Jira, o.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	static, err := fs.Sub(dist, "dist")
 	if err != nil {
 		panic(err) // dist is embedded at build time
@@ -66,7 +94,11 @@ func New(root string, proposals *proposal.Store, readonly string, repo string, j
 	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, r *http.Request) {
 		info := map[string]any{"editable": proposals != nil}
 		if proposals != nil {
-			info["base"] = proposals.Base
+			info["base"] = proposals.Base()
+			info["source"] = "local"
+			if _, ok := proposals.Src.(*source.GitHub); ok {
+				info["source"] = "github"
+			}
 		} else if readonly != "" {
 			info["readonlyReason"] = readonly
 		}
@@ -97,7 +129,9 @@ func New(root string, proposals *proposal.Store, readonly string, repo string, j
 			writeJSON(w, http.StatusOK, m)
 		}
 	})
-	registerProposals(mux, root, proposals, newJiraSync(jc, proposals, logger))
+	js := newJiraSync(jc, proposals, logger)
+	sy := newSyncer(proposals, js, logger, o.Poll)
+	registerProposals(mux, root, proposals, js, sy)
 	files := http.FileServerFS(static)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		// Built assets have content hashes in their names; index.html must
@@ -109,7 +143,15 @@ func New(root string, proposals *proposal.Store, readonly string, repo string, j
 		}
 		files.ServeHTTP(w, r)
 	})
-	return logRequests(logger, mux)
+	return &Handler{Handler: logRequests(logger, mux), sync: sy}
+}
+
+// Start polls accepted proposals for a merge until ctx is done, when
+// Options.Poll is set.
+func (h *Handler) Start(ctx context.Context) {
+	if h.sync != nil && h.sync.every > 0 {
+		go h.sync.loop(ctx)
+	}
 }
 
 // specView is the JSON shape of /api/spec.

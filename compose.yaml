@@ -2,8 +2,16 @@
 # workflow state (proposals, tasks) and is reachable only by fausto, on
 # this compose network.
 #
-#   cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD and FAUSTO_PROJECT_DIR
+#   cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD
 #   docker compose up -d --build    # http://127.0.0.1:7070
+#
+# Then register projects, and restart fausto to serve them: a local clone
+# under FAUSTO_PROJECTS_DIR (mounted at /projects), or a GitHub repository
+# (with FAUSTO_GITHUB_TOKEN set):
+#
+#   docker compose exec fausto fausto project add habyta -path /projects/habyta
+#   docker compose exec fausto fausto project add habyta -github owner/habyta
+#   docker compose restart fausto
 #
 # For developing fausto itself, run only the database, published on
 # localhost, and fausto from source:
@@ -27,7 +35,8 @@ services:
       FAUSTO_MONGO_DB: ${FAUSTO_MONGO_DB:-}
       FAUSTO_AUTHOR: ${FAUSTO_AUTHOR:-}
       FAUSTO_BASE: ${FAUSTO_BASE:-}
-      FAUSTO_REPO: ${FAUSTO_REPO:-}
+      FAUSTO_GITHUB_TOKEN: ${FAUSTO_GITHUB_TOKEN:-}
+      FAUSTO_POLL: ${FAUSTO_POLL:-}
       FAUSTO_JIRA_URL: ${FAUSTO_JIRA_URL:-}
       FAUSTO_JIRA_EMAIL: ${FAUSTO_JIRA_EMAIL:-}
       FAUSTO_JIRA_TOKEN: ${FAUSTO_JIRA_TOKEN:-}
@@ -44,8 +53,11 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      # The project fausto works on: a local clone.
-      - ${FAUSTO_PROJECT_DIR:?set FAUSTO_PROJECT_DIR in .env}:/repo
+      # Local clones of projects, registered as /projects/<dir>. Accepting a
+      # proposal creates a branch in the clone, nothing else.
+      - ${FAUSTO_PROJECTS_DIR:-..}:/projects
+      # fausto's own clones of GitHub projects.
+      - fausto-data:/data
     deploy:
       resources:
         limits:
@@ -85,3 +97,4 @@ services:
 
 volumes:
   mongo-data:
+  fausto-data:

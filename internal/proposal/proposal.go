@@ -2,13 +2,14 @@
 // proposals into agent tasks.
 //
 // A proposal is a document in the store (see package store) holding the
-// edits it makes to the spec, not a branch. Its review is computed by
-// applying those edits to the base branch as it is now: the diff, the
-// checks on the result, and the tasks accepting it would create. Accepting
-// it commits just the spec change to the base branch, and records the
-// tasks in the store; nothing else of the workflow lives in git. Commits are
-// built with git plumbing, so no work tree or index is touched except the
-// base branch's own work tree, which is fast-forwarded on accept.
+// edits it makes to the spec. Its review is computed by applying those
+// edits to the base branch as it is now: the diff, the checks on the
+// result, and the tasks accepting it would create. Accepting it puts just
+// the spec change, as one commit, on a branch of its own (and in a pull
+// request on GitHub; see package source) for people to merge; fausto never
+// commits to the base branch. Once the change is in the base branch the
+// proposal is applied, and its tasks are created. Commits are built with
+// git plumbing, so no work tree or index is touched.
 package proposal
 
 import (
@@ -23,21 +24,31 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/agentdef"
 	"github.com/JuanVizcaya/fausto/internal/check"
 	"github.com/JuanVizcaya/fausto/internal/edit"
+	"github.com/JuanVizcaya/fausto/internal/source"
 	"github.com/JuanVizcaya/fausto/internal/spec"
 	"github.com/JuanVizcaya/fausto/internal/store"
 )
 
-// Store manages proposals for the git repository at Root, keeping them in
-// DB.
+// Store manages the proposals of the project in Src, keeping them in DB.
 type Store struct {
-	Root   string // repository work tree
-	Base   string // branch proposals are made against and merged into
+	Src    source.Source
 	Author string // "Name <email>"; empty uses git's configured identity
 	DB     store.Store
 	Now    func() time.Time
 
-	mu sync.Mutex // serializes changes to the base branch
+	mu sync.Mutex // serializes reviews and status changes
 }
+
+// Root is the work tree fausto reads the project from.
+func (s *Store) Root() string { return s.Src.Dir() }
+
+// Base is the branch proposals target.
+func (s *Store) Base() string { return s.Src.Base() }
+
+// BranchPrefix starts the name of the branch an accepted proposal's change
+// goes to: "fausto-proposal/<proposal id>". (Not "fausto/": a project may
+// have a branch named fausto, and git can't have both.)
+const BranchPrefix = "fausto-proposal/"
 
 // ErrNotFound means no proposal has the given id.
 var ErrNotFound = errors.New("proposal not found")
@@ -111,7 +122,7 @@ func (s *Store) apply(baseHead string, changes []edit.Change, date string) (*app
 		if errors.As(err, &conflict) {
 			return nil, err
 		}
-		return nil, &ConflictError{fmt.Sprintf("The changes don't apply to %s: %v", s.Base, err)}
+		return nil, &ConflictError{fmt.Sprintf("The changes don't apply to %s: %v", s.Base(), err)}
 	}
 	return &applied{baseHead: baseHead, dir: dir, files: files, cleanup: cleanup}, nil
 }
@@ -131,9 +142,12 @@ func (s *Store) Create(ctx context.Context, title, description, milestone string
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	baseHead, err := s.revParse("refs/heads/" + s.Base)
+	if err := s.Src.Fetch(ctx); err != nil {
+		return nil, err
+	}
+	baseHead, err := s.revParse(s.Src.BaseRef())
 	if err != nil {
-		return nil, fmt.Errorf("base branch %q: %w", s.Base, err)
+		return nil, fmt.Errorf("base branch %q: %w", s.Base(), err)
 	}
 	today := s.today()
 	a, err := s.apply(baseHead, changes, today)
@@ -234,24 +248,30 @@ func (s *Store) detail(ctx context.Context, id string) (*Detail, error) {
 	if p.Tasks == nil {
 		p.Tasks = []string{}
 	}
-	d := &Detail{Proposal: *p, Base: s.Base, Changes: []ItemChange{}, Files: []string{}, Plans: []TaskPlan{}, Unassigned: []string{}}
+	d := &Detail{Proposal: *p, Base: s.Base(), Changes: []ItemChange{}, Files: []string{}, Plans: []TaskPlan{}, Unassigned: []string{}}
 	switch p.Status {
-	case "accepted":
-		// What was accepted: the commit that applied it.
+	case "accepted", "applied":
+		// What was accepted: its commit, and the tasks it creates or created.
 		if p.Commit != "" {
 			if err := s.describeCommit(d, p.Commit+"^", p.Commit); err != nil {
 				return nil, err
 			}
 		}
+		for _, t := range p.PendingTasks {
+			d.Plans = append(d.Plans, TaskPlan{ID: t.ID, Agent: t.Agent, Components: nonNil(t.Components),
+				SpecChanges: []string{}, Findings: []string{}})
+		}
 		return d, nil
 	case "rejected":
 		d.Conflict = "This proposal was rejected."
+	case "withdrawn":
+		d.Conflict = "This proposal was accepted, but its pull request was closed without merging."
 	}
 	if p.Legacy {
 		return d, nil
 	}
 
-	baseHead, err := s.revParse("refs/heads/" + s.Base)
+	baseHead, err := s.revParse(s.Src.BaseRef())
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +384,7 @@ func (s *Store) staleConflict(p *store.Proposal, baseHead string, changes []Item
 		return ""
 	}
 	slices.Sort(clashes)
-	return fmt.Sprintf("%s changed on %s since this proposal was made; review it and propose again.", strings.Join(clashes, ", "), s.Base)
+	return fmt.Sprintf("%s changed on %s since this proposal was made; review it and propose again.", strings.Join(clashes, ", "), s.Base())
 }
 
 func schemaOK(r *check.Report) bool {
@@ -389,12 +409,16 @@ func (s *Store) loadSpec(rev string) (*spec.Spec, error) {
 	return sp, nil
 }
 
-// Approve accepts an open proposal: it commits its spec change to the base
-// branch, fast-forwards the base branch's work tree if it has one, and
-// records a task for each affected agent.
+// Approve accepts an open proposal: it commits its spec change on top of
+// the base branch, puts the commit up for review on its own branch (and a
+// pull request, on GitHub), and plans a task for each affected agent. The
+// tasks are created when the change is merged; see Sync.
 func (s *Store) Approve(ctx context.Context, id string) (*store.Proposal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.Src.Fetch(ctx); err != nil {
+		return nil, err
+	}
 	d, err := s.detail(ctx, id)
 	if err != nil {
 		return nil, err
@@ -408,7 +432,7 @@ func (s *Store) Approve(ctx context.Context, id string) (*store.Proposal, error)
 	if d.Conflict != "" {
 		return nil, &ConflictError{d.Conflict}
 	}
-	baseHead, err := s.revParse("refs/heads/" + s.Base)
+	baseHead, err := s.revParse(s.Src.BaseRef())
 	if err != nil {
 		return nil, err
 	}
@@ -421,61 +445,169 @@ func (s *Store) Approve(ctx context.Context, id string) (*store.Proposal, error)
 		return nil, err
 	}
 
-	today := s.today()
 	tasks := make([]store.Task, 0, len(d.Plans))
-	ids := make([]string, 0, len(d.Plans))
 	for _, p := range d.Plans {
 		tasks = append(tasks, store.Task{
-			ID: p.ID, Agent: p.Agent, Proposal: id, Milestone: d.Milestone, Status: "open", Created: today,
+			ID: p.ID, Agent: p.Agent, Proposal: id, Milestone: d.Milestone, Status: "open",
 			Title: d.Title, Components: p.Components, Body: taskBody(p, d),
 		})
-		ids = append(ids, p.ID)
 	}
-
-	msg := fmt.Sprintf("Accept proposal: %s\n\n%s\n\nProposal: %s\n", d.Title, d.Description, id)
-	if len(ids) > 0 {
-		msg += "Tasks: " + strings.Join(ids, ", ") + "\n"
-	}
+	msg := fmt.Sprintf("%s\n\n%s\n\nProposal: %s\n", d.Title, d.Description, id)
 	commit, err := s.commit(baseHead+"^{tree}", a.files, []string{baseHead}, msg)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.advanceBase(commit, baseHead); err != nil {
+	review, err := s.Src.Publish(ctx, BranchPrefix+id, commit, d.Title, reviewBody(d, tasks))
+	if err != nil {
 		return nil, err
 	}
-	// The spec change is in; record the outcome. A failure here leaves the
-	// proposal open with its change committed, so say exactly that.
-	if err := s.DB.CreateTasks(ctx, tasks); err != nil {
-		return nil, fmt.Errorf("the change is committed (%.12s) but recording its tasks failed: %w", commit, err)
-	}
-	if err := s.DB.CloseProposal(ctx, id, "accepted", today, commit, ids); err != nil {
-		return nil, fmt.Errorf("the change is committed (%.12s) and its tasks recorded, but marking the proposal accepted failed: %w", commit, err)
+	err = s.DB.MoveProposal(ctx, id, "open", "accepted", store.ProposalUpdate{
+		Date: s.today(), Commit: commit, Branch: review.Branch, PR: review.PR, URL: review.URL, PendingTasks: tasks,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("the change is on branch %s but marking the proposal accepted failed: %w", review.Branch, err)
 	}
 	return s.DB.Proposal(ctx, id)
 }
 
-// advanceBase moves the base branch from baseHead to commit, fast-forwarding
-// its work tree if it has one.
-func (s *Store) advanceBase(commit, baseHead string) error {
-	wt, err := s.worktreeFor(s.Base)
-	if err != nil {
-		return err
+// reviewBody describes an accepted proposal in its pull request.
+func reviewBody(d *Detail, tasks []store.Task) string {
+	var b strings.Builder
+	if d.Description != "" {
+		b.WriteString(d.Description + "\n\n")
 	}
-	if wt != "" {
-		if _, err := s.git(wt, nil, nil, "merge", "--ff-only", "--quiet", commit); err != nil {
-			return fmt.Errorf("fast-forward %s in %s (commit or stash local changes to system/ first): %w", s.Base, wt, err)
+	fmt.Fprintf(&b, "Proposal `%s`, accepted in fausto.", d.ID)
+	if d.Milestone != "" {
+		fmt.Fprintf(&b, " It counts toward milestone `%s`.", d.Milestone)
+	}
+	b.WriteString("\n\n## Spec changes\n\n")
+	for _, c := range d.Changes {
+		b.WriteString("- " + c.String() + "\n")
+	}
+	if len(tasks) > 0 {
+		b.WriteString("\n## Tasks, created when this is merged\n\n")
+		for _, t := range tasks {
+			fmt.Fprintf(&b, "- `%s` for agent `%s`\n", t.ID, t.Agent)
 		}
-		return nil
 	}
-	_, err = s.git("", nil, nil, "update-ref", "refs/heads/"+s.Base, commit, baseHead)
-	return err
+	return b.String()
+}
+
+// SyncResult is what Sync did to one proposal.
+type SyncResult struct {
+	Proposal string   `json:"proposal"`
+	Status   string   `json:"status,omitempty"` // the new status, if it changed
+	Tasks    []string `json:"tasks,omitempty"`  // the tasks applying it created
+	Error    string   `json:"error,omitempty"`
+}
+
+// Sync brings accepted proposals up to date with their reviews: one whose
+// change is in the base branch becomes applied, and its tasks are created;
+// one whose pull request was closed without merging becomes withdrawn.
+func (s *Store) Sync(ctx context.Context) ([]SyncResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	all, err := s.DB.Proposals(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var accepted []store.Proposal
+	for _, p := range all {
+		if p.Status == "accepted" {
+			accepted = append(accepted, p)
+		}
+	}
+	if len(accepted) == 0 {
+		return nil, nil
+	}
+	if err := s.Src.Fetch(ctx); err != nil {
+		return nil, err
+	}
+	var out []SyncResult
+	for _, p := range accepted {
+		status, tasks, err := s.sync(ctx, &p)
+		r := SyncResult{Proposal: p.ID, Status: status, Tasks: tasks}
+		if err != nil {
+			r.Error = err.Error()
+		}
+		if status != "" || err != nil {
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) sync(ctx context.Context, p *store.Proposal) (string, []string, error) {
+	if p.Branch == "" {
+		// Accepted before proposals went through review: its change was
+		// committed to the base branch, and its tasks created, right away.
+		return "applied", nil, s.DB.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: p.Accepted})
+	}
+	o, err := s.Src.Status(ctx, source.Review{Branch: p.Branch, Commit: p.Commit, PR: p.PR, URL: p.URL})
+	if err != nil {
+		return "", nil, err
+	}
+	if o.State != source.Merged && s.contentMerged(p) {
+		// A squash or rebase merge of a local branch, which is then
+		// usually deleted.
+		o.State = source.Merged
+	}
+	switch o.State {
+	case source.Merged:
+		ids := make([]string, 0, len(p.PendingTasks))
+		tasks := make([]store.Task, 0, len(p.PendingTasks))
+		for _, t := range p.PendingTasks {
+			t.Created = s.today()
+			tasks = append(tasks, t)
+			ids = append(ids, t.ID)
+		}
+		// A sync that failed after creating the tasks left them; keep those.
+		if err := s.DB.CreateTasks(ctx, tasks); err != nil && !errors.Is(err, store.ErrExists) {
+			return "", nil, fmt.Errorf("create its tasks: %w", err)
+		}
+		return "applied", ids, s.DB.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: s.today(), Merged: o.Merged, Tasks: ids})
+	case source.Closed:
+		return "withdrawn", nil, s.DB.MoveProposal(ctx, p.ID, "accepted", "withdrawn", store.ProposalUpdate{Date: s.today()})
+	}
+	return "", nil, nil
+}
+
+// contentMerged reports whether every spec item the proposal's commit
+// changes is the same in the base branch as in the commit: the change was
+// merged some way that doesn't keep the commit, such as a squash.
+func (s *Store) contentMerged(p *store.Proposal) bool {
+	baseHead, err := s.revParse(s.Src.BaseRef())
+	if err != nil || p.Commit == "" {
+		return false
+	}
+	before, err1 := s.loadSpec(p.Commit + "^")
+	mine, err2 := s.loadSpec(p.Commit)
+	base, err3 := s.loadSpec(baseHead)
+	if err1 != nil || err2 != nil || err3 != nil || before == nil || mine == nil || base == nil {
+		return false
+	}
+	changed := DiffSpecs(before, mine)
+	if len(changed) == 0 {
+		return false
+	}
+	key := func(c ItemChange) string { return c.Kind + "\x00" + c.ID }
+	differs := map[string]bool{}
+	for _, c := range DiffSpecs(mine, base) {
+		differs[key(c)] = true
+	}
+	for _, c := range changed {
+		if differs[key(c)] {
+			return false
+		}
+	}
+	return true
 }
 
 // Reject closes an open proposal without applying it.
 func (s *Store) Reject(ctx context.Context, id string) (*store.Proposal, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	err := s.DB.CloseProposal(ctx, id, "rejected", s.today(), "", nil)
+	err := s.DB.MoveProposal(ctx, id, "open", "rejected", store.ProposalUpdate{Date: s.today()})
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return nil, ErrNotFound
@@ -491,7 +623,7 @@ func (s *Store) Reject(ctx context.Context, id string) (*store.Proposal, error) 
 // to change.
 func taskBody(p TaskPlan, d *Detail) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Proposal **%s** (`%s`) was accepted.", d.Title, d.ID)
+	fmt.Fprintf(&b, "Proposal **%s** (`%s`) was accepted and merged.", d.Title, d.ID)
 	if d.Milestone != "" {
 		fmt.Fprintf(&b, " It counts toward milestone `%s`.", d.Milestone)
 	}

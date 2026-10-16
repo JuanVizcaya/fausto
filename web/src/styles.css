@@ -296,6 +296,18 @@ p {
   background: var(--bad-soft);
   color: var(--bad);
 }
+.banner.info {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+}
 
 .cards {
   display: grid;
@@ -2179,9 +2191,13 @@ pre.source.sig {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 .proposal-row.status-accepted {
+  border-left-color: var(--warn);
+}
+.proposal-row.status-applied {
   border-left-color: var(--good);
 }
-.proposal-row.status-rejected {
+.proposal-row.status-rejected,
+.proposal-row.status-withdrawn {
   border-left-color: var(--border);
   opacity: 0.7;
 }
@@ -2323,4 +2339,9 @@ pre.source.sig {
   .doc-table th {
     white-space: normal;
   }
+}
+
+.project-picker {
+  margin-left: 6px;
+  max-width: 180px;
 }

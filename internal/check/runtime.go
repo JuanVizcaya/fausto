@@ -73,7 +73,7 @@ func checkRuntime(r *Repo) []Finding {
 		if compose == nil {
 			var err error
 			if compose, err = r.loadCompose(); err != nil {
-				return []Finding{{Message: err.Error(), Path: composeFile}}
+				return []Finding{{Message: err.Error(), Path: r.Spec.Layout.ComposeFile}}
 			}
 		}
 		for i := range r.Spec.System.Components {

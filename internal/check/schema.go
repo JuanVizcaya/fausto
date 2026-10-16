@@ -416,7 +416,7 @@ func checkEvents(s *spec.Spec) []Finding {
 		if producer.Status != "active" {
 			add(producer.ID, "event %q is active but its producer %q is %s", e.ID, producer.ID, producer.Status)
 		}
-		dir, _ := e.ProtoDir()
+		dir, _ := e.ProtoDir(s.Layout.ProtoRoot)
 		if !slices.ContainsFunc(producer.Contracts, func(c spec.Contract) bool { return c.Proto == dir }) {
 			add(producer.ID, "event %q is active but %s is not a contract of %q; declare it under contracts in system.yaml", e.ID, dir, producer.ID)
 		}

@@ -1,5 +1,5 @@
-// Package mongostore keeps fausto's proposals and tasks in MongoDB, shared
-// by everyone's fausto and the agents' `fausto task` commands.
+// Package mongostore keeps fausto's projects, and each project's proposals
+// and tasks, in fausto's MongoDB database.
 package mongostore
 
 import (
@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -16,9 +18,20 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/store"
 )
 
-// Store is a store.Store backed by a MongoDB database.
+// DB is fausto's MongoDB database: the projects it works on, and each
+// project's proposals and tasks in collections named after it
+// ("<project>.proposals", "<project>.tasks").
+type DB struct {
+	client   *mongo.Client
+	db       *mongo.Database
+	projects *mongo.Collection
+	indexed  sync.Map // project id -> struct{}, once its indexes exist
+}
+
+var _ store.Projects = (*DB)(nil)
+
+// Store is a store.Store for one project's collections.
 type Store struct {
-	client    *mongo.Client
 	proposals *mongo.Collection
 	tasks     *mongo.Collection
 }
@@ -27,7 +40,7 @@ var _ store.Store = (*Store)(nil)
 
 // FromEnv connects to FAUSTO_MONGO_URI (database FAUSTO_MONGO_DB, default
 // "fausto"). It returns nil, nil when FAUSTO_MONGO_URI is unset.
-func FromEnv(ctx context.Context) (*Store, error) {
+func FromEnv(ctx context.Context) (*DB, error) {
 	uri := os.Getenv("FAUSTO_MONGO_URI")
 	if uri == "" {
 		return nil, nil
@@ -39,9 +52,8 @@ func FromEnv(ctx context.Context) (*Store, error) {
 	return Open(ctx, uri, db)
 }
 
-// Open connects to the database db at uri, checks it answers, and ensures
-// its indexes.
-func Open(ctx context.Context, uri, db string) (*Store, error) {
+// Open connects to the database db at uri and checks it answers.
+func Open(ctx context.Context, uri, db string) (*DB, error) {
 	client, err := mongo.Connect(options.Client().ApplyURI(uri).SetTimeout(15 * time.Second).SetAppName("fausto"))
 	if err != nil {
 		return nil, fmt.Errorf("connect to MongoDB: %w", err)
@@ -53,20 +65,97 @@ func Open(ctx context.Context, uri, db string) (*Store, error) {
 		return nil, fmt.Errorf("reach MongoDB: %w", err)
 	}
 	d := client.Database(db)
-	s := &Store{client: client, proposals: d.Collection("proposals"), tasks: d.Collection("tasks")}
-	_, err = s.tasks.Indexes().CreateMany(ctx, []mongo.IndexModel{
-		{Keys: bson.D{{Key: "agent", Value: 1}, {Key: "status", Value: 1}}},
-		{Keys: bson.D{{Key: "milestone", Value: 1}}},
-		{Keys: bson.D{{Key: "proposal", Value: 1}}},
-	})
-	if err != nil {
-		_ = client.Disconnect(context.Background())
-		return nil, fmt.Errorf("create MongoDB indexes: %w", err)
-	}
-	return s, nil
+	return &DB{client: client, db: d, projects: d.Collection("projects")}, nil
 }
 
-func (s *Store) Close(ctx context.Context) error { return s.client.Disconnect(ctx) }
+func (d *DB) Close(ctx context.Context) error { return d.client.Disconnect(ctx) }
+
+// Store returns project id's proposals and tasks, creating the tasks'
+// indexes the first time.
+func (d *DB) Store(id string) store.Store {
+	s := &Store{proposals: d.db.Collection(id + ".proposals"), tasks: d.db.Collection(id + ".tasks")}
+	if _, done := d.indexed.Load(id); !done {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, err := s.tasks.Indexes().CreateMany(ctx, []mongo.IndexModel{
+			{Keys: bson.D{{Key: "agent", Value: 1}, {Key: "status", Value: 1}}},
+			{Keys: bson.D{{Key: "milestone", Value: 1}}},
+			{Keys: bson.D{{Key: "proposal", Value: 1}}},
+		})
+		if err == nil {
+			d.indexed.Store(id, struct{}{})
+		}
+	}
+	return s
+}
+
+func (d *DB) Projects(ctx context.Context) ([]store.Project, error) {
+	cur, err := d.projects.Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	out := []store.Project{}
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	store.SortProjects(out)
+	return out, nil
+}
+
+func (d *DB) Project(ctx context.Context, id string) (*store.Project, error) {
+	var p store.Project
+	err := d.projects.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&p)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (d *DB) PutProject(ctx context.Context, p *store.Project) error {
+	p.Updated = now()
+	_, err := d.projects.ReplaceOne(ctx, bson.D{{Key: "_id", Value: p.ID}}, p, options.Replace().SetUpsert(true))
+	return err
+}
+
+func (d *DB) DeleteProject(ctx context.Context, id string) error {
+	res, err := d.projects.DeleteOne(ctx, bson.D{{Key: "_id", Value: id}})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+// AdoptLegacy renames the collections fausto used before it had projects
+// ("proposals", "tasks") to project id's, so that project keeps them. It
+// reports which it renamed; it renames nothing whose target already exists.
+func (d *DB) AdoptLegacy(ctx context.Context, id string) ([]string, error) {
+	names, err := d.db.ListCollectionNames(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	var renamed []string
+	for _, c := range []string{"proposals", "tasks"} {
+		target := id + "." + c
+		if !slices.Contains(names, c) || slices.Contains(names, target) {
+			continue
+		}
+		cmd := bson.D{{Key: "renameCollection", Value: d.db.Name() + "." + c}, {Key: "to", Value: d.db.Name() + "." + target}}
+		if err := d.client.Database("admin").RunCommand(ctx, cmd).Err(); err != nil {
+			return renamed, fmt.Errorf("rename %s to %s: %w", c, target, err)
+		}
+		renamed = append(renamed, c+" → "+target)
+	}
+	return renamed, nil
+}
+
+// Close does nothing: the connection belongs to the DB.
+func (s *Store) Close(context.Context) error { return nil }
 
 func now() time.Time { return time.Now().UTC().Truncate(time.Millisecond) }
 
@@ -106,12 +195,36 @@ func (s *Store) Proposals(ctx context.Context) ([]store.Proposal, error) {
 	return out, nil
 }
 
-func (s *Store) CloseProposal(ctx context.Context, id, status, date, commit string, tasks []string) error {
-	set := bson.D{{Key: "status", Value: status}, {Key: "commit", Value: commit}, {Key: "tasks", Value: tasks}, {Key: "updated", Value: now()}}
-	if status == "accepted" {
-		set = append(set, bson.E{Key: "accepted", Value: date})
+func (s *Store) MoveProposal(ctx context.Context, id, from, to string, u store.ProposalUpdate) error {
+	if err := store.ValidMove(from, to); err != nil {
+		return err
 	}
-	return s.conditional(ctx, s.proposals, id, bson.D{{Key: "status", Value: "open"}}, bson.D{{Key: "$set", Value: set}})
+	// The fields Apply sets, read back from a scratch proposal.
+	var p store.Proposal
+	u.Apply(&p, to)
+	set := bson.D{{Key: "status", Value: to}, {Key: "updated", Value: now()}}
+	add := func(key, v string) {
+		if v != "" {
+			set = append(set, bson.E{Key: key, Value: v})
+		}
+	}
+	add("accepted", p.Accepted)
+	add("applied", p.Applied)
+	add("closed", p.Closed)
+	add("commit", p.Commit)
+	add("branch", p.Branch)
+	add("url", p.URL)
+	add("merged", p.Merged)
+	if p.PR != 0 {
+		set = append(set, bson.E{Key: "pr", Value: p.PR})
+	}
+	if u.Tasks != nil {
+		set = append(set, bson.E{Key: "tasks", Value: p.Tasks})
+	}
+	if u.PendingTasks != nil {
+		set = append(set, bson.E{Key: "pendingTasks", Value: p.PendingTasks})
+	}
+	return s.conditional(ctx, s.proposals, id, bson.D{{Key: "status", Value: from}}, bson.D{{Key: "$set", Value: set}})
 }
 
 // CreateTasks inserts tasks after checking none of their ids is taken.

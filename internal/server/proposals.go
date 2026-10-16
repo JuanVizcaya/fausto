@@ -9,6 +9,7 @@ import (
 
 	"github.com/JuanVizcaya/fausto/internal/edit"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
+	"github.com/JuanVizcaya/fausto/internal/source"
 	"github.com/JuanVizcaya/fausto/internal/spec"
 	"github.com/JuanVizcaya/fausto/internal/store"
 )
@@ -18,7 +19,7 @@ import (
 // never approves, so other sites cannot forge these requests.
 const requestHeader = "X-Fausto-Request"
 
-func registerProposals(mux *http.ServeMux, root string, ps *proposal.Store, js *jiraSync) {
+func registerProposals(mux *http.ServeMux, root string, ps *proposal.Store, js *jiraSync, sy *syncer) {
 	handle := func(pattern string, h func(w http.ResponseWriter, r *http.Request)) {
 		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
 			if ps == nil {
@@ -33,6 +34,9 @@ func registerProposals(mux *http.ServeMux, root string, ps *proposal.Store, js *
 		})
 	}
 	handle("GET /api/proposals", func(w http.ResponseWriter, r *http.Request) {
+		// Notice merged and closed reviews when someone looks, at most
+		// every few seconds.
+		sy.maybe(r.Context())
 		list, err := ps.List(r.Context())
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
@@ -67,16 +71,24 @@ func registerProposals(mux *http.ServeMux, root string, ps *proposal.Store, js *
 		}
 		writeJSON(w, http.StatusOK, d)
 	})
+	handle("POST /api/proposals/sync", func(w http.ResponseWriter, r *http.Request) {
+		results, jo, err := sy.run(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			Results  []proposal.SyncResult `json:"results"`
+			JiraSync *jiraOutcome          `json:"jiraSync,omitempty"`
+		}{nonNilResults(results), jo})
+	})
 	handle("POST /api/proposals/{id}/approve", func(w http.ResponseWriter, r *http.Request) {
 		p, err := ps.Approve(r.Context(), r.PathValue("id"))
 		if err != nil {
 			writeStoreError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, struct {
-			*store.Proposal
-			JiraSync *jiraOutcome `json:"jiraSync,omitempty"`
-		}{p, js.after(r.Context(), p.Tasks...)})
+		writeJSON(w, http.StatusOK, p)
 	})
 	handle("POST /api/proposals/{id}/reject", func(w http.ResponseWriter, r *http.Request) {
 		p, err := ps.Reject(r.Context(), r.PathValue("id"))
@@ -170,7 +182,10 @@ func writeError(w http.ResponseWriter, status int, err error) {
 func writeStoreError(w http.ResponseWriter, err error) {
 	var invalid *proposal.InvalidError
 	var conflict *proposal.ConflictError
+	var api *source.APIError
 	switch {
+	case errors.As(err, &api):
+		writeError(w, http.StatusBadGateway, err)
 	case errors.Is(err, proposal.ErrNotFound), errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, err)
 	case errors.As(err, &invalid):

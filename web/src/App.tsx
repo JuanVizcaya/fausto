@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchInfo, fetchProposals, fetchReport, fetchSchemas, fetchSpec } from "./api";
+import { currentProject, fetchInfo, fetchProjects, fetchProposals, fetchReport, fetchSchemas, fetchSpec } from "./api";
 import { DraftProvider } from "./draft";
 import { DraftBar } from "./DraftBar";
 import { EditorProvider } from "./editor";
-import type { Info, Proposal, Report, Schema, Spec } from "./types";
+import type { Info, ProjectInfo, Proposal, Report, Schema, Spec } from "./types";
 import { ArchitectureView } from "./views/architecture";
 import { RoadmapView } from "./views/Roadmap";
 import { QualityView } from "./views/Quality";
@@ -67,6 +67,7 @@ export default function App() {
   const [info, setInfo] = useState<Info | null>(null);
   const [schemas, setSchemas] = useState<Record<string, Schema> | null>(null);
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hideReadonly, setHideReadonly] = useState(false);
@@ -86,6 +87,12 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects()
+      .then(setProjects)
+      .catch(() => setProjects([]));
   }, []);
 
   useEffect(() => {
@@ -127,10 +134,30 @@ export default function App() {
                 <img src="/fausto-logo.svg" alt="" width={20} height={20} />
               </picture>
               <span className="brand-name">Fausto</span>
-              <span className="brand-sub">
-                {spec?.system.name ?? "fausto"}
-                {info?.base && ` · ${info.base}`}
-              </span>
+              {projects.length > 1 ? (
+                <select
+                  className="select project-picker"
+                  aria-label="Project"
+                  value={currentProject || projects[0].id}
+                  onChange={(e) => {
+                    // Each project is its own page: its spec, its drafts.
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("project", e.target.value);
+                    url.hash = window.location.hash.startsWith("#/proposals") ? "#/proposals" : window.location.hash.split("/").slice(0, 2).join("/");
+                    window.location.href = url.toString();
+                  }}
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id} title={p.source}>
+                      {p.name}
+                      {p.error ? " (unavailable)" : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="brand-sub">{spec?.system.name ?? "fausto"}</span>
+              )}
+              {info?.base && <span className="brand-sub">{info.base}</span>}
             </div>
             <nav className="tabs" aria-label="Views">
               {views.filter((v) => v.id !== "docs").map((v) => (

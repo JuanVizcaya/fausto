@@ -2,8 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +9,7 @@ import (
 
 	"github.com/JuanVizcaya/fausto/internal/check"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
+	"github.com/JuanVizcaya/fausto/internal/source"
 )
 
 // repoRoot is a snapshot of a real project (Habyta), relative to this package.
@@ -18,7 +17,7 @@ const repoRoot = "../../testdata/example"
 
 func get(t *testing.T, path string) (*http.Response, []byte) {
 	t.Helper()
-	h := New(repoRoot, nil, "", "", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: repoRoot, Readonly: "", Repo: ""})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	return rec.Result(), rec.Body.Bytes()
@@ -45,7 +44,7 @@ func TestEditingDisabledWithoutStore(t *testing.T) {
 }
 
 func TestInfoExplainsReadOnly(t *testing.T) {
-	h := New(repoRoot, nil, "git has no identity", "", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: repoRoot, Readonly: "git has no identity", Repo: ""})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/info", nil))
 	var info struct {
@@ -61,7 +60,7 @@ func TestInfoExplainsReadOnly(t *testing.T) {
 }
 
 func TestInfoReportsRepo(t *testing.T) {
-	h := New(repoRoot, nil, "", "https://github.com/CMOT/habyta", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: repoRoot, Readonly: "", Repo: "https://github.com/CMOT/habyta"})
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/info", nil))
 	var info struct {
@@ -86,7 +85,7 @@ func TestInfoReportsRepo(t *testing.T) {
 
 func TestMutationsNeedSameOriginHeader(t *testing.T) {
 	// The store is never reached: requests are rejected first.
-	h := New(repoRoot, &proposal.Store{Root: repoRoot, Base: "main"}, "", "", nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	h := New(Options{Root: repoRoot, Proposals: &proposal.Store{Src: &source.Local{Path: repoRoot, Branch: "main"}}})
 	for _, path := range []string{"/api/proposals/x/reject", "/api/tasks/x/status", "/api/jira/sync"} {
 		for _, tc := range []struct {
 			name   string

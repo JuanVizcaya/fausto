@@ -10,3 +10,7 @@ import (
 func TestContract(t *testing.T) {
 	storetest.Run(t, func(*testing.T) store.Store { return New() })
 }
+
+func TestProjects(t *testing.T) {
+	storetest.RunProjects(t, func(*testing.T) store.Projects { return NewProjects() })
+}
