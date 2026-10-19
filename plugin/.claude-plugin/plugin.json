@@ -1,0 +1,10 @@
+{
+  "name": "fausto",
+  "version": "0.1.0",
+  "description": "Work fausto tasks and run its drift checks from Claude Code: MCP tools for your tasks and checks, and skills for the workflow.",
+  "author": { "name": "Juan Vizcaya" },
+  "homepage": "https://github.com/JuanVizcaya/fausto",
+  "repository": "https://github.com/JuanVizcaya/fausto",
+  "license": "UNLICENSED",
+  "keywords": ["architecture", "drift", "agents", "tasks"]
+}

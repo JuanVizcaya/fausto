@@ -61,13 +61,21 @@ const usage = `usage:
   fausto project rm <id>
   fausto charters import|export|list [-root dir] [-project id] [-force]
                                move the agent charters into fausto's database, or back
+  fausto token create [-project id] <agent> | list | rm <label>
+                               agents' tokens for fausto's API (needs the database)
+  fausto connect -token <token> [-url url]
+                               connect this clone to fausto as that token's agent
+  fausto mcp                   MCP server for Claude Code: tasks and checks (stdio)
+  fausto claude [-base branch] <agent> [-- claude args...]
+                               start the agent in its own work tree, on its tasks
   fausto jira sync [-project id] [-dry-run] [task ...]
                                mirror tasks as Jira issues (needs FAUSTO_JIRA_*)
   fausto task list [-project id] [-agent id] [-status s,...]
   fausto task pull [-root dir] [-project id] <agent>
                                write the agent's open tasks to .fausto/tasks/
   fausto task start|done|drop [-project id] <task>
-Projects, proposals and tasks live in MongoDB: set FAUSTO_MONGO_URI (and FAUSTO_MONGO_DB).`
+Projects, proposals and tasks live in fausto's MongoDB (FAUSTO_MONGO_URI). Agents
+reach them through fausto's API instead, with a token (fausto connect).`
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -93,6 +101,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runProject(args[1:], stdout, stderr)
 	case "charters":
 		return runCharters(args[1:], stdout, stderr)
+	case "token":
+		return runToken(args[1:], stdout, stderr)
+	case "connect":
+		return runConnect(args[1:], stdout, stderr)
+	case "mcp":
+		return runMCP(args[1:], os.Stdin, stdout, stderr)
+	case "claude":
+		return runClaude(args[1:], stdout, stderr)
+	case "version":
+		fmt.Fprintln(stdout, "fausto", version)
+		return 0
 	default:
 		fmt.Fprintln(stderr, usage)
 		fmt.Fprintln(stderr, "checks:", strings.Join(check.Names(), ", "))
@@ -271,7 +290,7 @@ func runServe(args []string, stderr io.Writer) int {
 	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           server.Multi(entries),
+		Handler:           server.Multi(entries, tokensOf(db)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
@@ -290,6 +309,14 @@ func runServe(args []string, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// tokensOf is db as the server's token lookup, or nil without a database.
+func tokensOf(db *mongostore.DB) server.Tokens {
+	if db == nil {
+		return nil
+	}
+	return db
 }
 
 // openProject opens p's repository and returns its handler. Without a
@@ -325,7 +352,7 @@ func openProject(ctx context.Context, p store.Project, db *mongostore.DB, dbErr 
 		return server.New(server.Options{Root: src.Dir(), Readonly: readonly, Repo: repo, Logger: logger}), nil
 	}
 	ps := &proposal.Store{Src: src, Author: author, DB: db.Store(p.ID)}
-	return server.New(server.Options{Root: src.Dir(), Proposals: ps, Repo: repo, Jira: jc, Logger: logger, Poll: poll}), nil
+	return server.New(server.Options{Project: p.ID, Tokens: db, Root: src.Dir(), Proposals: ps, Repo: repo, Jira: jc, Logger: logger, Poll: poll}), nil
 }
 
 // runJiraSync mirrors the tasks (or the named ones) as Jira issues and
@@ -451,34 +478,7 @@ func resolveRoot(root *string) error {
 	return err
 }
 
-func printText(w io.Writer, report *check.Report) {
-	failed := 0
-	for _, r := range report.Results {
-		fmt.Fprintf(w, "%-7s  %-12s  %s\n", strings.ToUpper(string(r.Status)), r.Check, r.Description)
-		for _, f := range r.Findings {
-			var where []string
-			if f.Component != "" {
-				where = append(where, f.Component)
-			}
-			if f.Path != "" {
-				where = append(where, f.Path)
-			}
-			loc := ""
-			if len(where) > 0 {
-				loc = "[" + strings.Join(where, " ") + "] "
-			}
-			fmt.Fprintf(w, "         - %s%s\n", loc, f.Message)
-		}
-		if r.Status == check.Fail {
-			failed++
-		}
-	}
-	if failed == 0 {
-		fmt.Fprintln(w, "\nThe code matches the system spec.")
-	} else {
-		fmt.Fprintf(w, "\n%d of %d checks failed.\n", failed, len(report.Results))
-	}
-}
+func printText(w io.Writer, report *check.Report) { report.WriteText(w) }
 
 func findRoot() (string, error) {
 	dir, err := os.Getwd()

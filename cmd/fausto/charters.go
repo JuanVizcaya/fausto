@@ -11,16 +11,32 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/JuanVizcaya/fausto/internal/client"
 	"github.com/JuanVizcaya/fausto/internal/spec"
 	"github.com/JuanVizcaya/fausto/internal/store"
 	"github.com/JuanVizcaya/fausto/internal/store/mongostore"
 )
 
 // specOptions returns the options to read the project at root with: the
-// charters fausto keeps for it, when FAUSTO_MONGO_URI is set and fausto
-// keeps them. Otherwise, and when the database can't be reached (a warning
-// goes to stderr), the repository's own.
+// charters fausto keeps for it, when it keeps them and this clone is
+// connected to fausto (or FAUSTO_MONGO_URI is set). Otherwise, and when
+// fausto can't be reached (a warning goes to stderr), the repository's own.
 func specOptions(ctx context.Context, root, project string, stderr io.Writer) spec.Options {
+	if os.Getenv("FAUSTO_MONGO_URI") == "" {
+		c, err := client.Resolve(root)
+		if c == nil {
+			if err != nil {
+				fmt.Fprintln(stderr, "warning: using the repository's charters:", err)
+			}
+			return spec.Options{}
+		}
+		ch, err := c.Charters(ctx)
+		if err != nil {
+			fmt.Fprintln(stderr, "warning: using the repository's charters:", err)
+			return spec.Options{}
+		}
+		return spec.Options{Charters: ch}
+	}
 	db, err := mongostore.FromEnv(ctx)
 	if db == nil {
 		if err != nil {

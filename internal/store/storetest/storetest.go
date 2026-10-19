@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/JuanVizcaya/fausto/internal/edit"
@@ -185,6 +186,35 @@ func RunProjects(t *testing.T, open func(t *testing.T) store.Projects) {
 		}
 		if got, _ := r.Store("a").Tasks(ctx, store.TaskFilter{}); len(got) != 1 {
 			t.Errorf("project a's tasks = %+v", got)
+		}
+		secret, tok, err := store.NewToken("a", "residents", "Me <me@example.com>")
+		if err != nil || !strings.HasPrefix(secret, "fausto_") || !strings.HasPrefix(secret, tok.Label) || tok.Hash == secret {
+			t.Fatalf("token %q = %+v, %v", secret, tok, err)
+		}
+		if err := r.CreateToken(ctx, tok); err != nil {
+			t.Fatal(err)
+		}
+		_, other, _ := store.NewToken("b", "gateway", "")
+		if err := r.CreateToken(ctx, other); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := r.TokenByHash(ctx, store.HashToken(secret)); err != nil || got.Agent != "residents" || got.Project != "a" {
+			t.Errorf("token by hash = %+v, %v", got, err)
+		}
+		if _, err := r.TokenByHash(ctx, store.HashToken("fausto_nope")); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("unknown token: err = %v", err)
+		}
+		if got, _ := r.Tokens(ctx, "a"); len(got) != 1 || got[0].Label != tok.Label {
+			t.Errorf("tokens of a = %+v", got)
+		}
+		if got, _ := r.Tokens(ctx, ""); len(got) != 2 {
+			t.Errorf("all tokens = %+v", got)
+		}
+		if err := r.DeleteToken(ctx, tok.Label); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.TokenByHash(ctx, tok.Hash); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("revoked token: err = %v", err)
 		}
 		if err := r.DeleteProject(ctx, "b"); err != nil {
 			t.Fatal(err)

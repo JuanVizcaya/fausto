@@ -34,10 +34,12 @@ Also follow every principle in `system/principles.yaml`:
 
 ## How to work
 
+Your tasks come from fausto. Use its MCP tools when you have them (`fausto_tasks`, `fausto_task_start`, `fausto_task_done`, `fausto_check`); otherwise the `fausto` commands below, from the repository root.
+
 1. Read `CLAUDE.md`, your charter `system/agents/tooling.yaml`, and the parts of `system/` your task touches.
-2. Get your tasks: from the repository root, run `fausto task pull tooling`. It writes your open and in-progress tasks to `.fausto/tasks/` (git-ignored; never commit them). Work them oldest first; their names start with the date. Run `fausto task start <id>` when you start one.
+2. Get your tasks: `fausto task pull tooling` writes your open and in-progress tasks to `.fausto/tasks/` (never commit them). Work them oldest first; their names start with the date. Run `fausto task start <id>` when you start one.
 3. Change only the paths you own. If a task needs a change anywhere else, in another agent's paths or in `system/`, don't make it: describe what you need in your summary so the orchestrator can propose it.
-4. Run the drift checks and fix what they report in your area. From the repository root:
+4. Run the drift checks and fix what they report in your area:
 
    ```sh
    fausto check

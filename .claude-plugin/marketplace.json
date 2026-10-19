@@ -1,0 +1,12 @@
+{
+  "name": "fausto",
+  "owner": { "name": "Juan Vizcaya" },
+  "metadata": { "description": "Fausto: architecture spec, drift checks and agent tasks for any project." },
+  "plugins": [
+    {
+      "name": "fausto",
+      "source": "./plugin",
+      "description": "Work fausto tasks and run its drift checks from Claude Code: MCP tools for your tasks and checks, and skills for the workflow."
+    }
+  ]
+}

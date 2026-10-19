@@ -209,11 +209,12 @@ type Projects struct {
 	mu       sync.Mutex
 	projects map[string]store.Project
 	stores   map[string]*Store
+	tokens   map[string]store.Token
 }
 
 // NewProjects returns an empty registry.
 func NewProjects() *Projects {
-	return &Projects{projects: map[string]store.Project{}, stores: map[string]*Store{}}
+	return &Projects{projects: map[string]store.Project{}, stores: map[string]*Store{}, tokens: map[string]store.Token{}}
 }
 
 var _ store.Projects = (*Projects)(nil)
@@ -264,6 +265,51 @@ func (r *Projects) Store(id string) store.Store {
 		r.stores[id] = New()
 	}
 	return r.stores[id]
+}
+
+func (r *Projects) CreateToken(_ context.Context, t *store.Token) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.tokens[t.Hash]; ok {
+		return store.ErrExists
+	}
+	r.tokens[t.Hash] = *t
+	return nil
+}
+
+func (r *Projects) TokenByHash(_ context.Context, hash string) (*store.Token, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.tokens[hash]
+	if !ok {
+		return nil, store.ErrNotFound
+	}
+	return &t, nil
+}
+
+func (r *Projects) Tokens(_ context.Context, project string) ([]store.Token, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []store.Token{}
+	for _, t := range r.tokens {
+		if project == "" || t.Project == project {
+			out = append(out, t)
+		}
+	}
+	slices.SortFunc(out, func(a, b store.Token) int { return a.Created.Compare(b.Created) })
+	return out, nil
+}
+
+func (r *Projects) DeleteToken(_ context.Context, label string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for h, t := range r.tokens {
+		if t.Label == label {
+			delete(r.tokens, h)
+			return nil
+		}
+	}
+	return store.ErrNotFound
 }
 
 func (r *Projects) Close(context.Context) error { return nil }

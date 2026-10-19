@@ -31,6 +31,10 @@ var dist embed.FS
 
 // Options configures the handler for one project.
 type Options struct {
+	// Project is the project's id; agents' tokens are for one project.
+	Project string
+	// Tokens finds agents' tokens; nil turns the agent API off.
+	Tokens Tokens
 	// Root is the project's work tree.
 	Root string
 	// Proposals may be nil, which disables editing (for example without a
@@ -150,6 +154,7 @@ func New(o Options) *Handler {
 	js := newJiraSync(jc, proposals, logger)
 	sy := newSyncer(proposals, js, logger, o.Poll)
 	registerProposals(mux, root, proposals, js, sy)
+	registerAgentAPI(mux, o.Project, root, proposals, o.Tokens, js)
 	files := http.FileServerFS(static)
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		// Built assets have content hashes in their names; index.html must

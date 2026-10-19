@@ -77,7 +77,7 @@ docker compose exec fausto fausto project add habyta -path /projects/habyta    #
 docker compose restart fausto
 ```
 
-Fausto only listens on localhost and has no login. Without the database, or
+Fausto only listens on localhost and has no login for people; its agent API takes a token per agent (see [Tasks](#tasks)). Without the database, or
 without `FAUSTO_AUTHOR` when git has no identity, it starts read-only; a
 banner at the top says why and how to fix it.
 
@@ -153,15 +153,31 @@ either. The connection string is read only from the environment.
 An agent works from its tasks as Markdown files:
 
 ```sh
-fausto task pull residents   # writes .fausto/tasks/<id>.md (git-ignored)
+fausto task pull             # writes .fausto/tasks/<id>.md (git ignores it)
 fausto task start <id>       # open → in-progress
 fausto task done <id>        # → done (or `drop`)
-fausto task list -agent residents -status open,in-progress
+fausto task list -status open,in-progress
 ```
 
 `pull` also removes the files of the agent's tasks that are no longer open.
-Each status change records who made it (`FAUSTO_AUTHOR`, else git's
-identity), and the Tasks tab shows that history.
+Each status change records who made it, and the Tasks tab shows that history.
+
+Agents reach their tasks through fausto's API, never the database. Each agent
+gets a token, good for that agent of that project only; fausto keeps just
+its hash:
+
+```sh
+fausto token create residents   # in your clone (needs the database); prints the token once
+fausto token list
+fausto token rm <label>         # revoke
+fausto connect -token <token>   # in a clone: work as that agent from it
+```
+
+`fausto connect` keeps the connection in `.fausto/config.json` (or use
+`FAUSTO_URL` and `FAUSTO_TOKEN`), and git ignores `.fausto/` through
+`.git/info/exclude`, so the project's `.gitignore` never mentions fausto.
+With docker compose, run the token commands where the database is:
+`docker compose exec fausto fausto token create -project habyta residents`.
 
 
 ## Jira
@@ -267,28 +283,43 @@ definition in `.claude/agents/<id>.md`: its scope, owned paths and
 components, rules, the principles, and how to work its tasks. For charters
 in the repository, proposals regenerate them when charters change, and the
 `agents` check fails when they are stale; don't edit them. For charters
-fausto keeps, the definitions aren't part of the project: `fausto agents`
-writes them to `.claude/agents/` where you run the agent.
+fausto keeps, the definitions aren't part of the project: fausto serves them.
 
-To work an agent's open tasks, give it its own branch and work tree, pull
-its tasks, start it, then review and merge (the Tasks tab shows these
-commands per task). The agent needs `FAUSTO_MONGO_URI` in its environment:
+To work an agent's open tasks, start it from your clone:
 
 ```sh
-git worktree add ../myproject-residents -b agent/residents
-cd ../myproject-residents
-fausto task pull residents
-fausto agents                   # when fausto keeps the charters
-claude --agent residents "Work your open tasks."
-# back in your checkout:
-git diff dev...agent/residents && git merge agent/residents
+fausto token create residents   # once
+fausto claude residents         # work tree ../<project>-residents, branch agent/residents
+# then review and merge:
+git diff main...agent/residents && git merge agent/residents
 ```
 
-Run one session per agent; separate work trees let them work in parallel.
+`fausto claude` creates the agent's work tree and branch the first time,
+connects it with the agent's token, pulls its tasks, and starts Claude Code
+with the agent's definition and fausto's MCP tools, both from fausto
+(`claude --agents … --agent residents --mcp-config …`): nothing about the
+agent is written to the project. Arguments after `--` go to Claude Code in
+place of the "Work your open tasks." prompt. Run one session per agent;
+separate work trees let them work in parallel. The Tasks tab shows these
+commands per task.
+
+## Claude Code plugin
+
+This repository is also a Claude Code plugin marketplace. The `fausto`
+plugin gives any session in a connected clone fausto's MCP tools
+(`fausto_tasks`, `fausto_task_start`, `fausto_task_done`, `fausto_task_drop`,
+`fausto_check`, through `fausto mcp`) and two skills, for working tasks and
+for running the drift checks. Install it once, with `fausto` on your `PATH`:
+
+```text
+/plugin install fausto --marketplace JuanVizcaya/fausto
+```
+
+`fausto claude` doesn't need it: it hands the agent the MCP tools itself.
 
 ## Code owners
 
-`fausto agents` also writes `.github/CODEOWNERS` from the charters, so GitHub
+`fausto agents` writes `.github/CODEOWNERS` from the charters, so GitHub
 asks the right people to review each change. A charter's `reviewers` lists
 GitHub users (`@name`) or teams (`@org/team`); every path it `owns` goes to
 them. A charter without reviewers, typically an agent's, goes to the

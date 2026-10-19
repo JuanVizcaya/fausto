@@ -15,7 +15,7 @@ func TestMulti(t *testing.T) {
 		{ID: "a", Name: "A", Source: "/src/a", Handler: named("a")},
 		{ID: "b", Name: "B", Source: "github.com/o/b", Handler: named("b")},
 		{ID: "c", Name: "C", Error: "clone failed"},
-	})
+	}, nil)
 	get := func(path, project string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		if project != "" {

@@ -7,6 +7,10 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base32"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -180,7 +184,50 @@ type Projects interface {
 	DeleteProject(ctx context.Context, id string) error
 	// Store is the proposals and tasks of project id.
 	Store(id string) Store
+
+	// CreateToken records a token; only its hash is kept.
+	CreateToken(ctx context.Context, t *Token) error
+	// TokenByHash returns the token with the hash; ErrNotFound if none.
+	TokenByHash(ctx context.Context, hash string) (*Token, error)
+	// Tokens returns project's tokens (every project's when project is
+	// empty), oldest first.
+	Tokens(ctx context.Context, project string) ([]Token, error)
+	// DeleteToken revokes the token with the label.
+	DeleteToken(ctx context.Context, label string) error
+
 	Close(ctx context.Context) error
+}
+
+// Token lets an agent work its tasks through fausto's API, without access
+// to the database: it is good for one agent of one project. The token
+// itself is shown once, when created; fausto keeps its hash.
+type Token struct {
+	Hash    string    `json:"-" bson:"_id"`
+	Label   string    `json:"label" bson:"label"` // the token's first characters, to tell it apart
+	Project string    `json:"project" bson:"project"`
+	Agent   string    `json:"agent" bson:"agent"`
+	Created time.Time `json:"created" bson:"created"`
+	By      string    `json:"by" bson:"by"`
+}
+
+// tokenPrefix starts every token, so a leaked one is easy to recognize.
+const tokenPrefix = "fausto_"
+
+// NewToken returns a new random token for agent of project, and its record.
+func NewToken(project, agent, by string) (string, *Token, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", nil, err
+	}
+	secret := tokenPrefix + strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))
+	return secret, &Token{Hash: HashToken(secret), Label: secret[:len(tokenPrefix)+8], Project: project, Agent: agent,
+		Created: time.Now().UTC().Truncate(time.Millisecond), By: by}, nil
+}
+
+// HashToken is the hash fausto keeps of a token.
+func HashToken(secret string) string {
+	sum := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(sum[:])
 }
 
 // ValidProjectID returns an error unless id is a lowercase slug.

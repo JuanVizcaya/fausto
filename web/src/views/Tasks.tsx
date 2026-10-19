@@ -382,7 +382,7 @@ function TaskDetail({
         (a?.kind === "human" ? (
           <p className="muted small">A person works this task by hand, then sets its status to done.</p>
         ) : (
-          <RunTask agent={t.agent} project={spec.system.name} kept={spec.charters === "fausto"} />
+          <RunTask agent={t.agent} project={spec.system.name} base={info?.base} />
         ))
       )}
       <Markdown source={t.body} />
@@ -424,18 +424,16 @@ function SyncSummary({ report, error }: { report?: JiraReport; error?: string })
   );
 }
 
-/** How to start the agent on its tasks: its own branch and work tree of the
- * project, its tasks pulled from fausto's database, and a Claude Code session
- * with the agent definition from .claude/agents. */
-export function RunTask({ agent, project, kept, title = "Run this task" }: { agent: string; project: string; kept?: boolean; title?: string }) {
+/** How to start the agent on its tasks: `fausto claude` gives it its own
+ * work tree and branch, its token, its tasks, and its definition and
+ * fausto's MCP tools, all from fausto. */
+export function RunTask({ agent, project, base, title = "Run this task" }: { agent: string; project: string; base?: string; title?: string }) {
   const [copied, setCopied] = useState(false);
+  const into = base ?? "main";
   const commands = [
-    `git worktree add ../${project}-${agent} -b agent/${agent}   # once; later: git -C ../${project}-${agent} merge dev`,
-    `cd ../${project}-${agent}`,
-    `fausto task pull ${agent}   # writes .fausto/tasks/`,
-    // Charters kept in fausto: their definitions aren't in the repository.
-    ...(kept ? ["fausto agents   # writes .claude/agents/ from fausto's charters"] : []),
-    `claude --agent ${agent} "Work your open tasks."`,
+    `fausto token create ${agent}   # once, in your clone; keeps the token in .fausto/`,
+    `fausto claude ${agent}         # work tree ../${project}-${agent}, branch agent/${agent}`,
+    `git diff ${into}...agent/${agent} && git merge agent/${agent}   # when it's done`,
   ].join("\n");
   const copy = async () => {
     try {
@@ -455,9 +453,8 @@ export function RunTask({ agent, project, kept, title = "Run this task" }: { age
         </button>
       </div>
       <p className="muted">
-        From the repository root, start the agent in its own branch with its tasks pulled from fausto (it needs{" "}
-        <Code>FAUSTO_MONGO_URI</Code> in its environment). It works all its open tasks, then you review with{" "}
-        <Code>{`git diff dev...agent/${agent}`}</Code> and merge.
+        From your clone, start the agent in its own work tree and branch. fausto gives it its token, its tasks, its definition and
+        its tools; nothing about the agent is written to the project. It works its open tasks; then you review and merge.
       </p>
       <pre className="mono run-task-cmd">{commands}</pre>
     </div>

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "fausto": {
+      "command": "fausto",
+      "args": ["mcp"]
+    }
+  }
+}

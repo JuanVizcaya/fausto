@@ -44,10 +44,16 @@ fast-start version.
 - `internal/source` — a project's repository: a local clone, or GitHub
   (fausto's own clone, branches pushed and pull requests opened with
   `FAUSTO_GITHUB_TOKEN`)
-- `internal/agentdef` — generates `.claude/agents/*.md` and
-  `.github/CODEOWNERS` from agent charters
+- `internal/agentdef` — agent definitions (as files, or the description and
+  prompt `claude --agents` takes) and `.github/CODEOWNERS` from charters
+- `internal/client` — the agent side of fausto's API, and a clone's
+  connection in `.fausto/config.json`
+- `internal/mcp` — `fausto mcp`, the stdio MCP server agents use
+- `plugin/`, `.claude-plugin/` — the Claude Code plugin and its marketplace;
+  check them with `claude plugin validate .` and `claude plugin validate plugin`
 - `internal/jira` — Jira Cloud client and the task → issue sync
-- `internal/server` — HTTP API + embeds the built web UI (`dist/`)
+- `internal/server` — HTTP API + embeds the built web UI (`dist/`); the
+  agent API (`/api/agent/…`, token-authenticated) is in `agentapi.go`
 - `web/` — React + Vite source for the UI; **not** built automatically, see
   below
 

@@ -104,23 +104,31 @@ func Write(root string, files map[string][]byte) error {
 	return nil
 }
 
-// Render returns the definition for agent a.
+// Render returns the definition for agent a, as a Claude Code agent file.
 func Render(s *spec.Spec, a *spec.Agent) []byte {
-	var b strings.Builder
+	description, prompt := Parts(s, a)
 	front, _ := yaml.Marshal(struct {
 		Name        string `yaml:"name"`
 		Description string `yaml:"description"`
-	}{
-		Name: a.ID,
-		Description: fmt.Sprintf("%s for %s. %s Use it to work the fausto tasks assigned to agent `%s`.",
-			a.Name, s.System.Name, strings.TrimSpace(a.Scope), a.ID),
-	})
+	}{Name: a.ID, Description: description})
 	charter := a.File
 	if charter == "" {
-		charter = spec.Dir + "/agents/" + a.ID + ".yaml"
+		charter = spec.AgentFile(a.ID)
 	}
-	fmt.Fprintf(&b, "---\n%s---\n\n", front)
-	fmt.Fprintf(&b, "<!-- %s from %s. Don't edit it: change the charter through a fausto proposal. -->\n\n", generatedBy, charter)
+	return []byte(fmt.Sprintf("---\n%s---\n\n<!-- %s from %s. Don't edit it: change the charter through a fausto proposal. -->\n\n%s",
+		front, generatedBy, charter, prompt))
+}
+
+// Parts returns agent a's definition as Claude Code takes it in --agents:
+// when to use the agent, and its system prompt.
+func Parts(s *spec.Spec, a *spec.Agent) (description, prompt string) {
+	description = fmt.Sprintf("%s for %s. %s Use it to work the fausto tasks assigned to agent `%s`.",
+		a.Name, s.System.Name, strings.TrimSpace(a.Scope), a.ID)
+	charter := a.File
+	if charter == "" || s.Charters == spec.ChartersInFausto {
+		charter = "" // not a file the agent can read
+	}
+	var b strings.Builder
 	fmt.Fprintf(&b, "You are the **%s** in the %s project. Several agents build %s, each in its own area. "+
 		"An orchestrator (a human) decides the architecture in `%s/` and assigns work to agents as fausto tasks.\n\n",
 		a.Name, s.System.Name, s.System.Name, spec.Dir)
@@ -158,13 +166,19 @@ func Render(s *spec.Spec, a *spec.Agent) []byte {
 		fmt.Fprintf(&b, "- **%s** (`%s`)\n", strings.TrimSpace(p.Title), p.ID)
 	}
 
+	read := "your scope and rules above"
+	if charter != "" {
+		read = "your charter `" + charter + "`"
+	}
 	fmt.Fprintf(&b, `
 ## How to work
 
-1. Read `+"`CLAUDE.md`"+`, your charter `+"`%[1]s`"+`, and the parts of `+"`%[2]s/`"+` your task touches.
-2. Get your tasks: from the repository root, run `+"`fausto task pull %[3]s`"+`. It writes your open and in-progress tasks to `+"`.fausto/tasks/`"+` (git-ignored; never commit them). Work them oldest first; their names start with the date. Run `+"`fausto task start <id>`"+` when you start one.
+Your tasks come from fausto. Use its MCP tools when you have them (`+"`fausto_tasks`, `fausto_task_start`, `fausto_task_done`, `fausto_check`"+`); otherwise the `+"`fausto`"+` commands below, from the repository root.
+
+1. Read `+"`CLAUDE.md`"+`, %[1]s, and the parts of `+"`%[2]s/`"+` your task touches.
+2. Get your tasks: `+"`fausto task pull %[3]s`"+` writes your open and in-progress tasks to `+"`.fausto/tasks/`"+` (never commit them). Work them oldest first; their names start with the date. Run `+"`fausto task start <id>`"+` when you start one.
 3. Change only the paths you own. If a task needs a change anywhere else, in another agent's paths or in `+"`%[2]s/`"+`, don't make it: describe what you need in your summary so the orchestrator can propose it.
-4. Run the drift checks and fix what they report in your area. From the repository root:
+4. Run the drift checks and fix what they report in your area:
 
    `+"```sh"+`
    fausto check
@@ -178,6 +192,6 @@ func Render(s *spec.Spec, a *spec.Agent) []byte {
 
 5. When the checks pass, commit on your branch with the task id in the message, then run `+"`fausto task done <id>`"+`.
 6. Finish with a summary: what you did for each task, anything you couldn't do and why, and the changes you need from other agents or the orchestrator.
-`, charter, spec.Dir, a.ID)
-	return []byte(b.String())
+`, read, spec.Dir, a.ID)
+	return description, b.String()
 }

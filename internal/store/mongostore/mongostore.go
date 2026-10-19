@@ -25,6 +25,7 @@ type DB struct {
 	client   *mongo.Client
 	db       *mongo.Database
 	projects *mongo.Collection
+	tokens   *mongo.Collection
 	indexed  sync.Map // project id -> struct{}, once its indexes exist
 }
 
@@ -66,7 +67,7 @@ func Open(ctx context.Context, uri, db string) (*DB, error) {
 		return nil, fmt.Errorf("reach MongoDB: %w", err)
 	}
 	d := client.Database(db)
-	return &DB{client: client, db: d, projects: d.Collection("projects")}, nil
+	return &DB{client: client, db: d, projects: d.Collection("projects"), tokens: d.Collection("tokens")}, nil
 }
 
 func (d *DB) Close(ctx context.Context) error { return d.client.Disconnect(ctx) }
@@ -123,6 +124,53 @@ func (d *DB) PutProject(ctx context.Context, p *store.Project) error {
 
 func (d *DB) DeleteProject(ctx context.Context, id string) error {
 	res, err := d.projects.DeleteOne(ctx, bson.D{{Key: "_id", Value: id}})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (d *DB) CreateToken(ctx context.Context, t *store.Token) error {
+	_, err := d.tokens.InsertOne(ctx, t)
+	if mongo.IsDuplicateKeyError(err) {
+		return store.ErrExists
+	}
+	return err
+}
+
+func (d *DB) TokenByHash(ctx context.Context, hash string) (*store.Token, error) {
+	var t store.Token
+	err := d.tokens.FindOne(ctx, bson.D{{Key: "_id", Value: hash}}).Decode(&t)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (d *DB) Tokens(ctx context.Context, project string) ([]store.Token, error) {
+	filter := bson.D{}
+	if project != "" {
+		filter = bson.D{{Key: "project", Value: project}}
+	}
+	cur, err := d.tokens.Find(ctx, filter, options.Find().SetSort(bson.D{{Key: "created", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	out := []store.Token{}
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (d *DB) DeleteToken(ctx context.Context, label string) error {
+	res, err := d.tokens.DeleteOne(ctx, bson.D{{Key: "label", Value: label}})
 	if err != nil {
 		return err
 	}

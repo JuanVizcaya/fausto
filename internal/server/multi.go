@@ -2,6 +2,9 @@ package server
 
 import (
 	"net/http"
+	"strings"
+
+	"github.com/JuanVizcaya/fausto/internal/store"
 )
 
 // ProjectHeader names the project an API request is for; the UI sends it
@@ -20,9 +23,10 @@ type Project struct {
 	Error string `json:"error,omitempty"`
 }
 
-// Multi serves several projects: GET /api/projects lists them, and every
-// other request goes to the project its ProjectHeader names.
-func Multi(projects []Project) http.Handler {
+// Multi serves several projects: GET /api/projects lists them, a request
+// to the agent API goes to the project of its token (found with tokens),
+// and every other request to the project its ProjectHeader names.
+func Multi(projects []Project, tokens Tokens) http.Handler {
 	byID := map[string]*Project{}
 	for i := range projects {
 		byID[projects[i].ID] = &projects[i]
@@ -43,6 +47,19 @@ func Multi(projects []Project) http.Handler {
 		id := r.Header.Get(ProjectHeader)
 		if id == "" {
 			id = r.URL.Query().Get("project")
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/agent/") {
+			// The token says which project; the project checks it again.
+			id = ""
+			if secret := bearer(r); secret != "" && tokens != nil {
+				if t, err := tokens.TokenByHash(r.Context(), store.HashToken(secret)); err == nil {
+					id = t.Project
+				}
+			}
+			if byID[id] == nil {
+				writeError(w, http.StatusUnauthorized, errUnauthorized)
+				return
+			}
 		}
 		p := &projects[0]
 		if id != "" {

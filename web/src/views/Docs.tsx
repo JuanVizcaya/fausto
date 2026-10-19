@@ -102,7 +102,7 @@ function Overview() {
           </>
         }
       >
-        <svg viewBox="0 0 1040 440" role="img" aria-label="fausto in the middle. The orchestrator uses its web UI over HTTP, agents run fausto task commands, and CI runs fausto check. fausto reads each project's git repository and puts every accepted proposal on a branch or pull request of its own, reads and writes projects, proposals and tasks in its MongoDB, and creates, attaches to and moves Jira issues while reading their status and assignee.">
+        <svg viewBox="0 0 1040 440" role="img" aria-label="fausto in the middle. The orchestrator uses its web UI over HTTP, agents reach their tasks through its token-authenticated agent API, from the CLI or MCP tools, and CI runs fausto check. fausto reads each project's git repository and puts every accepted proposal on a branch or pull request of its own, reads and writes projects, proposals and tasks in its MongoDB, and creates, attaches to and moves Jira issues while reading their status and assignee.">
           <Markers p="ov" />
           <Box x={20} y={58} w={200} h={64} name="Orchestrator" note="browser · localhost:7070" />
           <Box x={20} y={198} w={200} h={64} name="Agents" note="Claude Code, own worktree" />
@@ -112,7 +112,7 @@ function Overview() {
           <text className="t big" x={520} y={196} textAnchor="middle">fausto</text>
           <text className="s" x={520} y={218} textAnchor="middle">one Go binary · cmd/fausto</text>
           <text className="l mono" x={520} y={250} textAnchor="middle">serve · check · agents</text>
-          <text className="l mono" x={520} y={270} textAnchor="middle">task · project · jira sync</text>
+          <text className="l mono" x={520} y={270} textAnchor="middle">task · claude · mcp · project</text>
 
           <Box x={820} y={58} w={200} h={64} name="Project repositories" note="local clone or GitHub" kind="ext" />
           <Box x={820} y={198} w={200} h={64} name="MongoDB" note="fausto's own · deployed with it" kind="hot" />
@@ -122,8 +122,8 @@ function Overview() {
           <text className="l" x={310} y={80} textAnchor="middle">reviews, proposes, accepts</text>
           <text className="s" x={310} y={108} textAnchor="middle">HTTP /api</text>
           <line className="wire" x1={220} y1={230} x2={398} y2={230} markerEnd={a} />
-          <text className="l" x={310} y={220} textAnchor="middle">task pull · start · done</text>
-          <text className="s" x={310} y={248} textAnchor="middle">tasks land in .fausto/tasks/</text>
+          <text className="l" x={310} y={220} textAnchor="middle">tasks · MCP tools</text>
+          <text className="s" x={310} y={248} textAnchor="middle">HTTP /api/agent, a token each</text>
           <line className="wire" x1={220} y1={370} x2={398} y2={370} markerEnd={a} />
           <text className="l" x={310} y={360} textAnchor="middle">fausto check</text>
           <text className="s" x={310} y={388} textAnchor="middle">needs no database</text>
@@ -306,7 +306,11 @@ const commands: [string, string][] = [
   ["fausto serve", "This UI, for every project (or only -root). Editing needs the database and a git identity."],
   ["fausto project add <id> -path <clone> | -github owner/repo", "Register a project; list and rm show and remove them."],
   ["fausto charters import | export | list", "Move a project's agent charters into fausto, or back into system/agents/."],
-  ["fausto task pull <agent>", "Write the agent's open tasks to .fausto/tasks/ and remove closed ones."],
+  ["fausto token create <agent>", "A token for one agent of one project; list and rm show and revoke them. Needs the database."],
+  ["fausto connect -token <token>", "Work as that token's agent from this clone; kept in .fausto/config.json, which git ignores."],
+  ["fausto claude <agent>", "Start the agent in its own work tree and branch, with its tasks, definition and MCP tools from fausto."],
+  ["fausto mcp", "The MCP server Claude Code starts for an agent: its tasks, and the checks on its clone."],
+  ["fausto task pull", "Write the agent's open tasks to .fausto/tasks/ and remove closed ones."],
   ["fausto task start | done | drop <id>", "Change a task's status, record who did it, and move its Jira issue."],
   ["fausto task list [-agent a] [-status s]", "List tasks from the database."],
   ["fausto jira sync [-dry-run]", "Create missing issues, attach each task's .md, and move issues to the task's status."],
@@ -316,6 +320,7 @@ const settings: [string, string][] = [
   ["FAUSTO_MONGO_URI", "fausto's database; compose.yaml runs it with fausto. Without it, fausto is read-only and the task commands don't run."],
   ["FAUSTO_MONGO_DB", "Database name; defaults to fausto."],
   ["FAUSTO_PROJECT", "The project a command works on; defaults to the clone it runs in, or the only one."],
+  ["FAUSTO_URL, FAUSTO_TOKEN", "Where an agent reaches fausto, and its token; instead of fausto connect."],
   ["FAUSTO_GITHUB_TOKEN", "For projects on GitHub: pushes proposal branches and opens pull requests (contents and pull requests, read and write)."],
   ["FAUSTO_DATA", "Where fausto keeps its clones of GitHub projects; defaults to the user cache directory."],
   ["FAUSTO_AUTHOR", "\"Name <email>\" for proposal commits and task history; defaults to git's identity."],
