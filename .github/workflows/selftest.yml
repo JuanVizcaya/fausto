@@ -1,11 +1,18 @@
 # Runs the reusable check workflow, as projects call it, on the example
-# project, with fausto built from this commit.
+# project, with fausto built from this commit; or, run by hand, with a
+# release ("latest" or vX.Y.Z).
 name: check workflow
 
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The fausto to run, as the check workflow takes it; empty builds this commit.
+        type: string
+        default: latest
 
 permissions:
   contents: read
@@ -14,7 +21,7 @@ jobs:
   example:
     uses: ./.github/workflows/check.yml
     with:
-      version: ${{ github.event.pull_request.head.sha || github.sha }}
+      version: ${{ inputs.version || github.event.pull_request.head.sha || github.sha }}
       working-directory: testdata/example
       # The example project's other checks report the drift it has.
       checks: schema layers contracts runtime agents
