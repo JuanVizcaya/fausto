@@ -91,9 +91,10 @@ func dataDir() string {
 	return filepath.Join(os.TempDir(), "fausto")
 }
 
-// openSource opens a project's repository.
+// openSource opens a project's repository: its local clone if it has one,
+// else its GitHub repository.
 func openSource(ctx context.Context, p store.Project) (source.Source, error) {
-	if p.GitHub != "" {
+	if p.GitHub != "" && p.Path == "" {
 		return source.OpenGitHub(ctx, &source.GitHub{
 			Repo: p.GitHub, Branch: p.Base, Token: os.Getenv("FAUSTO_GITHUB_TOKEN"),
 			Clone: filepath.Join(dataDir(), "repos", p.ID),
@@ -133,7 +134,7 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 	var adopt *bool
 	if sub == "add" {
 		path = fs.String("path", "", "a local clone of the project")
-		github = fs.String("github", "", `the project's GitHub repository, "owner/repo"; fausto keeps its own clone (in FAUSTO_DATA) and needs FAUSTO_GITHUB_TOKEN to open pull requests`)
+		github = fs.String("github", "", `the project's GitHub repository, "owner/repo": without -path, fausto keeps its own clone (in FAUSTO_DATA) and opens pull requests; with -path, for checking pull requests (default: the clone's origin)`)
 		name = fs.String("name", "", "display name (default: the id)")
 		base = fs.String("base", "", "branch proposals target (default: the checked-out branch, or the repository's default branch)")
 		adopt = fs.Bool("adopt", false, "give this project the proposals and tasks fausto kept before it had projects")
@@ -170,7 +171,7 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 		return 0
 
 	case "add":
-		if fs.NArg() != 1 || (*path == "") == (*github == "") {
+		if fs.NArg() != 1 || (*path == "" && *github == "") {
 			fmt.Fprintln(stderr, "usage: fausto project add <id> -path <clone> | -github owner/repo [-name name] [-base branch] [-adopt]")
 			return 2
 		}

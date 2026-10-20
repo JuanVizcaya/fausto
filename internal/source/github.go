@@ -1,19 +1,17 @@
 package source
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/JuanVizcaya/fausto/internal/github"
 )
 
 // GitHub is a repository on GitHub. Fausto keeps its own clone of it in
@@ -87,16 +85,8 @@ func (g *GitHub) Fetch(ctx context.Context) error {
 	return err
 }
 
-// auth is the environment that gives git the token as an HTTP header for
-// this command only.
-func (g *GitHub) auth() []string {
-	if g.Token == "" {
-		return nil
-	}
-	basic := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + g.Token))
-	return []string{"GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0=Authorization: Basic " + basic,
-		"GIT_TERMINAL_PROMPT=0"}
-}
+// auth is the environment that gives git the token for one command.
+func (g *GitHub) auth() []string { return github.GitAuthEnv(g.Token) }
 
 type pull struct {
 	Number         int    `json:"number"`
@@ -152,55 +142,8 @@ func (g *GitHub) Status(ctx context.Context, r Review) (*Outcome, error) {
 }
 
 // APIError is an unsuccessful GitHub API response.
-type APIError struct {
-	Status  int
-	Message string
-}
-
-func (e *APIError) Error() string { return fmt.Sprintf("GitHub API: %d %s", e.Status, e.Message) }
+type APIError = github.APIError
 
 func (g *GitHub) call(ctx context.Context, method, path string, in, out any) error {
-	var body io.Reader
-	if in != nil {
-		b, err := json.Marshal(in)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(b)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(g.API, "/")+path, body)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if in != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if g.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+g.Token)
-	}
-	res, err := g.HTTP.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
-	if err != nil {
-		return err
-	}
-	if res.StatusCode >= 300 {
-		var e struct {
-			Message string `json:"message"`
-		}
-		_ = json.Unmarshal(data, &e)
-		if e.Message == "" {
-			e.Message = http.StatusText(res.StatusCode)
-		}
-		return &APIError{Status: res.StatusCode, Message: e.Message}
-	}
-	if out == nil {
-		return nil
-	}
-	return json.Unmarshal(data, out)
+	return (&github.Client{Token: g.Token, API: g.API, HTTP: g.HTTP}).Call(ctx, method, path, in, out)
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/check"
 	"github.com/JuanVizcaya/fausto/internal/code"
 	"github.com/JuanVizcaya/fausto/internal/jira"
+	"github.com/JuanVizcaya/fausto/internal/prcheck"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
 	"github.com/JuanVizcaya/fausto/internal/schema"
 	"github.com/JuanVizcaya/fausto/internal/source"
@@ -50,8 +51,14 @@ type Options struct {
 	Jira   *jira.Client
 	Logger *slog.Logger
 	// Poll, when positive, is how often accepted proposals are checked for
-	// a merge in the background, for as long as ctx lasts (see Start).
+	// a merge, and pull requests checked (PRCheck), in the background, for
+	// as long as ctx lasts (see Start).
 	Poll time.Duration
+	// PRCheck, when set, checks the project's open pull requests against
+	// the spec fausto keeps and reports on GitHub; PRCheckOff otherwise
+	// says why it is off, for the UI.
+	PRCheck    *prcheck.Checker
+	PRCheckOff string
 }
 
 // Handler serves one project.
@@ -132,6 +139,11 @@ func New(o Options) *Handler {
 		if repo != "" {
 			info["repo"] = repo
 		}
+		if o.PRCheck != nil {
+			info["prChecks"] = o.PRCheck.Repo
+		} else if o.PRCheckOff != "" {
+			info["prChecksOff"] = o.PRCheckOff
+		}
 		if jc != nil {
 			info["jira"] = map[string]string{"url": jc.URL, "project": jc.Project}
 		}
@@ -161,6 +173,9 @@ func New(o Options) *Handler {
 	})
 	js := newJiraSync(jc, proposals, logger)
 	sy := newSyncer(proposals, js, logger, o.Poll)
+	if sy != nil {
+		sy.prs = o.PRCheck
+	}
 	registerProposals(mux, root, proposals, js, sy)
 	registerAgentAPI(mux, o.Project, root, proposals, o.Tokens, js)
 	files := http.FileServerFS(static)

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/JuanVizcaya/fausto/internal/prcheck"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
 )
 
@@ -17,6 +18,7 @@ type syncer struct {
 	js     *jiraSync
 	logger *slog.Logger
 	every  time.Duration
+	prs    *prcheck.Checker // nil: no pull request checks
 
 	mu   sync.Mutex
 	last time.Time
@@ -72,6 +74,7 @@ func (s *syncer) maybe(ctx context.Context) {
 }
 
 func (s *syncer) loop(ctx context.Context) {
+	s.checkPRs(ctx) // pull requests opened while fausto was off
 	t := time.NewTicker(s.every)
 	defer t.Stop()
 	for {
@@ -82,6 +85,28 @@ func (s *syncer) loop(ctx context.Context) {
 			if _, _, err := s.run(ctx); err != nil {
 				s.logger.Warn("proposal sync", "error", err)
 			}
+			s.checkPRs(ctx)
+		}
+	}
+}
+
+// checkPRs checks the pull requests not yet checked at the latest spec
+// revision; errors are logged.
+func (s *syncer) checkPRs(ctx context.Context) {
+	if s.prs == nil {
+		return
+	}
+	results, err := s.prs.Run(ctx)
+	if err != nil {
+		s.logger.Warn("pull request checks", "repo", s.prs.Repo, "error", err)
+		return
+	}
+	for _, r := range results {
+		switch {
+		case r.Error != "":
+			s.logger.Warn("pull request check", "pr", r.PR, "error", r.Error)
+		case !r.Skipped:
+			s.logger.Info("pull request check", "pr", r.PR, "sha", r.SHA, "state", r.State, "spec revision", r.Revision)
 		}
 	}
 }

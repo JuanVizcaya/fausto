@@ -37,7 +37,9 @@ import (
 
 	"github.com/JuanVizcaya/fausto/internal/agentdef"
 	"github.com/JuanVizcaya/fausto/internal/check"
+	"github.com/JuanVizcaya/fausto/internal/github"
 	"github.com/JuanVizcaya/fausto/internal/jira"
+	"github.com/JuanVizcaya/fausto/internal/prcheck"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
 	"github.com/JuanVizcaya/fausto/internal/server"
 	"github.com/JuanVizcaya/fausto/internal/spec"
@@ -372,7 +374,20 @@ func openProject(ctx context.Context, p store.Project, db *mongostore.DB, dbErr 
 		return server.New(server.Options{Root: src.Dir(), Readonly: readonly, Repo: repo, Logger: logger}), nil
 	}
 	ps := &proposal.Store{Src: src, Author: author, DB: db.Store(p.ID)}
-	return server.New(server.Options{Project: p.ID, Tokens: db, Root: src.Dir(), Proposals: ps, Repo: repo, Jira: jc, Logger: logger, Poll: poll}), nil
+	o := server.Options{Project: p.ID, Tokens: db, Root: src.Dir(), Proposals: ps, Repo: repo, Jira: jc, Logger: logger, Poll: poll}
+	// Pull requests are checked against the spec fausto keeps, on GitHub.
+	gh := cmp.Or(p.GitHub, strings.TrimPrefix(repo, "https://github.com/"))
+	switch token := os.Getenv("FAUSTO_GITHUB_TOKEN"); {
+	case gh == "":
+		o.PRCheckOff = "the project isn't on GitHub"
+	case token == "":
+		o.PRCheckOff = "set FAUSTO_GITHUB_TOKEN to check " + gh + "'s pull requests"
+	case poll <= 0:
+		o.PRCheckOff = "polling is off (-poll 0)"
+	default:
+		o.PRCheck = &prcheck.Checker{Repo: gh, GH: &github.Client{Token: token}, DB: ps.DB, Clone: filepath.Join(dataDir(), "repos", p.ID+"-prs.git")}
+	}
+	return server.New(o), nil
 }
 
 // runJiraSync mirrors the tasks (or the named ones) as Jira issues and

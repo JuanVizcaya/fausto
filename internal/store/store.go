@@ -195,7 +195,9 @@ func ValidMove(from, to string) error {
 type Project struct {
 	ID   string `json:"id" bson:"_id"`
 	Name string `json:"name" bson:"name"`
-	// Exactly one of Path (a local clone) and GitHub ("owner/repo").
+	// Path is a local clone, and GitHub ("owner/repo") the repository on
+	// GitHub: fausto works on the clone when there is one, else on its own
+	// clone of GitHub; it checks pull requests on GitHub.
 	Path   string `json:"path,omitempty" bson:"path,omitempty"`
 	GitHub string `json:"github,omitempty" bson:"github,omitempty"`
 	// Base is the branch proposals target; empty means the checked-out
