@@ -55,6 +55,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Go, to build fausto from a branch or commit
+        if: ${{ inputs.version != 'latest' && !startsWith(inputs.version, 'v') }}
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.27"
+          cache: false
       - name: Install fausto
         env:
           GH_TOKEN: ${{ github.token }}
