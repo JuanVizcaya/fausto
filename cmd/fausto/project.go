@@ -159,8 +159,11 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 		tw := tabwriter.NewWriter(stdout, 0, 4, 2, ' ', 0)
 		for _, p := range projects {
 			src := p.Path
-			if p.GitHub != "" {
+			switch {
+			case src == "":
 				src = "github.com/" + p.GitHub
+			case p.GitHub != "":
+				src += " (github.com/" + p.GitHub + ")"
 			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.ID, p.Name, src, p.Base)
 		}
