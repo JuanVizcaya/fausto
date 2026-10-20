@@ -2,16 +2,20 @@
 # workflow state (proposals, tasks) and is reachable only by fausto, on
 # this compose network.
 #
-#   cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD
+#   cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD and FAUSTO_PROJECTS_DIR
 #   docker compose up -d --build    # http://127.0.0.1:7070
 #
 # Then register projects, and restart fausto to serve them: a local clone
-# under FAUSTO_PROJECTS_DIR (mounted at /projects), or a GitHub repository
-# (with FAUSTO_GITHUB_TOKEN set):
+# under FAUSTO_PROJECTS_DIR, by the same path as on your machine (it is
+# mounted at that path), or a GitHub repository (with FAUSTO_GITHUB_TOKEN):
 #
-#   docker compose exec fausto fausto project add habyta -path /projects/habyta
+#   docker compose exec fausto fausto project add habyta -path "$HOME/src/habyta"
 #   docker compose exec fausto fausto project add habyta -github owner/habyta
 #   docker compose restart fausto
+#
+# compose.dev.yaml also publishes the database on localhost, for the fausto
+# CLI on your machine (fausto token, project, charters; fausto serve from
+# source): docker compose -f compose.yaml -f compose.dev.yaml up -d
 #
 # For developing fausto itself, run only the database, published on
 # localhost, and fausto from source:
@@ -53,9 +57,10 @@ services:
     security_opt:
       - no-new-privileges:true
     volumes:
-      # Local clones of projects, registered as /projects/<dir>. Accepting a
-      # proposal creates a branch in the clone, nothing else.
-      - ${FAUSTO_PROJECTS_DIR:-..}:/projects
+      # Local clones of projects, at the same path as on your machine, so a
+      # project registered there or here has one path. Accepting a proposal
+      # creates a branch in the clone, nothing else.
+      - ${FAUSTO_PROJECTS_DIR:?set FAUSTO_PROJECTS_DIR in .env to the absolute path of the directory holding your clones}:${FAUSTO_PROJECTS_DIR}
       # fausto's own clones of GitHub projects.
       - fausto-data:/data
     deploy:

@@ -103,7 +103,7 @@ repository:
 ```sh
 cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD, FAUSTO_AUTHOR (and FAUSTO_UID/GID on Linux)
 docker compose up -d --build    # http://127.0.0.1:7070
-docker compose exec fausto fausto project add habyta -path /projects/habyta    # see Projects
+docker compose exec fausto fausto project add habyta -path /home/you/src/habyta    # its path on your machine; see Projects
 docker compose restart fausto
 ```
 
