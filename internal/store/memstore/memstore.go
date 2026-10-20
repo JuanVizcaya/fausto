@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,13 +17,13 @@ type Store struct {
 	mu        sync.Mutex
 	proposals map[string]store.Proposal
 	tasks     map[string]store.Task
-	charters  map[string]store.Charter
+	revisions []store.SpecRevision
 	Now       func() time.Time
 }
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{proposals: map[string]store.Proposal{}, tasks: map[string]store.Task{}, charters: map[string]store.Charter{}}
+	return &Store{proposals: map[string]store.Proposal{}, tasks: map[string]store.Task{}}
 }
 
 var _ store.Store = (*Store)(nil)
@@ -48,9 +47,7 @@ func cloneProposal(p store.Proposal) store.Proposal {
 	out := clone(p)
 	out.Changes = clone(p.Changes) // json:"-" on Proposal
 	out.PendingTasks = clone(p.PendingTasks)
-	out.BaseCharters = clone(p.BaseCharters)
-	out.PendingCharters = clone(p.PendingCharters)
-	out.CharterDiff = p.CharterDiff
+	out.SpecDiff = p.SpecDiff
 	return out
 }
 
@@ -178,28 +175,42 @@ func (s *Store) SetTaskJira(_ context.Context, id, key string) error {
 	return nil
 }
 
-func (s *Store) Charters(context.Context) ([]store.Charter, error) {
+func (s *Store) SpecRevision(_ context.Context, n int) (*store.SpecRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := []store.Charter{}
-	for _, c := range s.charters {
-		out = append(out, c)
+	if len(s.revisions) == 0 || n < 0 || n > len(s.revisions) {
+		return nil, store.ErrNotFound
 	}
-	slices.SortFunc(out, func(a, b store.Charter) int { return strings.Compare(a.ID, b.ID) })
-	return out, nil
+	if n == 0 {
+		n = len(s.revisions)
+	}
+	r := clone(s.revisions[n-1])
+	return &r, nil
 }
 
-func (s *Store) PutCharters(_ context.Context, put []store.Charter, del []string) error {
+func (s *Store) AddSpecRevision(_ context.Context, r *store.SpecRevision) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, c := range put {
-		c.Updated = s.now()
-		s.charters[c.ID] = c
+	if r.N != len(s.revisions)+1 {
+		return store.ErrChanged
 	}
-	for _, id := range del {
-		delete(s.charters, id)
+	if r.At.IsZero() {
+		r.At = s.now()
 	}
+	s.revisions = append(s.revisions, clone(*r))
 	return nil
+}
+
+func (s *Store) SpecRevisions(context.Context) ([]store.SpecRevision, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]store.SpecRevision, 0, len(s.revisions))
+	for i := len(s.revisions) - 1; i >= 0; i-- {
+		r := s.revisions[i]
+		r.Files = nil
+		out = append(out, r)
+	}
+	return out, nil
 }
 
 func (s *Store) Close(context.Context) error { return nil }

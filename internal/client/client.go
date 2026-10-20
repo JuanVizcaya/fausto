@@ -77,6 +77,12 @@ func (c *Config) Save(root string) error {
 // Exclude adds .fausto/ to the clone's .git/info/exclude (shared by its
 // work trees), if it isn't there. Outside a git repository it does nothing.
 func Exclude(root string) error {
+	return ExcludePath(root, ".fausto/", "fausto's connection and pulled tasks")
+}
+
+// ExcludePath adds pattern, with a comment saying why, to the clone's
+// .git/info/exclude if it isn't there.
+func ExcludePath(root, pattern, why string) error {
 	cmd := exec.Command("git", "-c", "safe.directory=*", "rev-parse", "--git-common-dir")
 	cmd.Dir = root
 	out, err := cmd.Output()
@@ -92,8 +98,9 @@ func Exclude(root string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
+	bare := strings.Trim(pattern, "/")
 	for _, line := range strings.Split(string(cur), "\n") {
-		if l := strings.TrimSpace(line); l == ".fausto/" || l == ".fausto" || l == "/.fausto/" {
+		if l := strings.Trim(strings.TrimSpace(line), "/"); l == bare {
 			return nil
 		}
 	}
@@ -103,7 +110,7 @@ func Exclude(root string) error {
 	if len(cur) > 0 && !bytes.HasSuffix(cur, []byte("\n")) {
 		cur = append(cur, '\n')
 	}
-	cur = append(cur, []byte("# fausto's connection and pulled tasks\n.fausto/\n")...)
+	cur = append(cur, []byte("# "+why+"\n"+pattern+"\n")...)
 	return os.WriteFile(p, cur, 0o644)
 }
 
@@ -165,23 +172,24 @@ func (c *Client) Definition(ctx context.Context) (*Definition, error) {
 	return &d, c.call(ctx, http.MethodGet, "/api/agent/definition", nil, &d)
 }
 
-// Charters returns the charters fausto keeps, by agent id; nil when the
-// project keeps its own.
-func (c *Client) Charters(ctx context.Context) (map[string][]byte, error) {
+// Spec returns the spec fausto keeps, its files by path (system/...), and
+// its revision; nil and 0 when the project keeps its own.
+func (c *Client) Spec(ctx context.Context) (map[string][]byte, int, error) {
 	var res struct {
-		Charters map[string]string `json:"charters"`
+		Revision int               `json:"revision"`
+		Files    map[string]string `json:"files"`
 	}
-	if err := c.call(ctx, http.MethodGet, "/api/agent/charters", nil, &res); err != nil {
-		return nil, err
+	if err := c.call(ctx, http.MethodGet, "/api/agent/spec", nil, &res); err != nil {
+		return nil, 0, err
 	}
-	if len(res.Charters) == 0 {
-		return nil, nil
+	if len(res.Files) == 0 {
+		return nil, 0, nil
 	}
-	out := make(map[string][]byte, len(res.Charters))
-	for id, y := range res.Charters {
-		out[id] = []byte(y)
+	out := make(map[string][]byte, len(res.Files))
+	for p, content := range res.Files {
+		out[p] = []byte(content)
 	}
-	return out, nil
+	return out, res.Revision, nil
 }
 
 // Tasks returns the agent's tasks with the statuses (all when none).

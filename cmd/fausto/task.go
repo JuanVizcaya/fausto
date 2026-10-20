@@ -164,7 +164,15 @@ func runTask(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "usage: fausto task pull [-root dir] <agent>")
 			return 2
 		}
-		return pullTasks(ctx, ts, *root, who, stdout, stderr)
+		code := pullTasks(ctx, ts, *root, who, stdout, stderr)
+		if a, ok := ts.(apiTasks); ok && code == 0 {
+			// Keep the spec copy current with the tasks.
+			if _, err := pullSpecWith(ctx, a.c, *root, stdout); err != nil {
+				fmt.Fprintln(stderr, err)
+				return 1
+			}
+		}
+		return code
 
 	case "start", "done", "drop":
 		if fs.NArg() != 1 {

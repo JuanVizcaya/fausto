@@ -8,7 +8,7 @@
 //	fausto agents [-root dir]
 //	fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
 //	fausto project list|add|rm ...
-//	fausto charters import|export|list [-root dir] [-project id] [-force]
+//	fausto spec import|export|log|pull [-root dir] [-project id]
 //	fausto jira sync [-project id] [-dry-run] [task ...]
 //	fausto task list|pull|start|done|drop [-project id] ...
 //
@@ -59,8 +59,9 @@ const usage = `usage:
   fausto project list
   fausto project add <id> -path <clone> | -github owner/repo [-name name] [-base branch] [-adopt]
   fausto project rm <id>
-  fausto charters import|export|list [-root dir] [-project id] [-force]
-                               move the agent charters into fausto's database, or back
+  fausto spec import [-force] | export [-revision n] | log | pull   [-root dir] [-project id]
+                               keep a project's spec in fausto's database, write it
+                               back, list its revisions, or write it where an agent works
   fausto token create [-project id] <agent> | list | rm <label>
                                agents' tokens for fausto's API (needs the database)
   fausto connect -token <token> [-url url]
@@ -99,8 +100,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runTask(args[1:], stdout, stderr)
 	case "project":
 		return runProject(args[1:], stdout, stderr)
+	case "spec":
+		return runSpec(args[1:], stdout, stderr)
 	case "charters":
-		return runCharters(args[1:], stdout, stderr)
+		fmt.Fprintln(stderr, "fausto now keeps whole specs, charters included: use `fausto spec import|export|log|pull`")
+		return 2
 	case "token":
 		return runToken(args[1:], stdout, stderr)
 	case "connect":
@@ -507,8 +511,13 @@ func findRoot() (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", errors.New("no " + spec.Dir + "/system.yaml found in this or any parent directory; pass -root")
+			break
 		}
 		dir = parent
 	}
+	// A clone whose spec fausto keeps has no system/: the git work tree.
+	if out, err := exec.Command("git", "-c", "safe.directory=*", "rev-parse", "--show-toplevel").Output(); err == nil {
+		return strings.TrimSpace(string(out)), nil
+	}
+	return "", errors.New("not in a project clone (no " + spec.Dir + "/system.yaml here or above, and not in a git work tree); pass -root")
 }

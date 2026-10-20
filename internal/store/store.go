@@ -78,41 +78,71 @@ type Proposal struct {
 	// PendingTasks are the tasks accepting it planned, created on apply.
 	Tasks        []string `json:"tasks" bson:"tasks"`
 	PendingTasks []Task   `json:"-" bson:"pendingTasks,omitempty"`
-	// For a project whose charters fausto keeps: BaseCharters are the
-	// charters' hashes, by agent id, when the proposal was made;
-	// PendingCharters are the charters accepting it changes, by agent id
-	// ("" removes one), written when it is applied; CharterDiff shows those
-	// changes, as they are in no commit.
-	BaseCharters    map[string]string `json:"-" bson:"baseCharters,omitempty"`
-	PendingCharters map[string]string `json:"-" bson:"pendingCharters,omitempty"`
-	CharterDiff     string            `json:"-" bson:"charterDiff,omitempty"`
+	// For a project whose spec fausto keeps: BaseRevision is the spec
+	// revision the proposal was made against; SpecDiff shows the spec
+	// changes accepting it made, which are in no commit; Revision is the
+	// revision applying it wrote.
+	BaseRevision int    `json:"baseRevision,omitempty" bson:"baseRevision,omitempty"`
+	SpecDiff     string `json:"-" bson:"specDiff,omitempty"`
+	Revision     int    `json:"revision,omitempty" bson:"revision,omitempty"`
 	// Legacy marks a proposal imported from git, whose edits weren't kept.
 	Legacy  bool      `json:"legacy,omitempty" bson:"legacy,omitempty"`
 	Updated time.Time `json:"updated" bson:"updated"`
 }
 
-// Charter is an agent's charter, kept as the YAML file it was in the
-// project (system/agents/<id>.yaml), so edits keep its comments and layout.
-type Charter struct {
-	ID      string    `json:"id" bson:"_id"`
-	YAML    string    `json:"yaml" bson:"yaml"`
-	Updated time.Time `json:"updated" bson:"updated"`
+// SpecRevision is a project's whole spec, the files of its system/
+// directory, as one change left it. Revisions are numbered from 1; each
+// holds every file, so any revision can be read, exported or restored on
+// its own.
+type SpecRevision struct {
+	N     int        `json:"n" bson:"_id"`
+	Files []SpecFile `json:"files,omitempty" bson:"files"`
+	At    time.Time  `json:"at" bson:"at"`
+	By    string     `json:"by" bson:"by"`
+	// Proposal is the proposal it applied, if it did.
+	Proposal string `json:"proposal,omitempty" bson:"proposal,omitempty"`
+	Message  string `json:"message" bson:"message"`
+}
+
+// SpecFile is one file of the spec, such as system/system.yaml, kept as
+// written so edits keep its comments and layout.
+type SpecFile struct {
+	Path    string `json:"path" bson:"path"`
+	Content string `json:"content" bson:"content"`
+}
+
+// FileMap returns r's files by path.
+func (r *SpecRevision) FileMap() map[string][]byte {
+	out := make(map[string][]byte, len(r.Files))
+	for _, f := range r.Files {
+		out[f.Path] = []byte(f.Content)
+	}
+	return out
+}
+
+// SpecFiles turns files by path into SpecFiles, sorted by path.
+func SpecFiles(files map[string][]byte) []SpecFile {
+	out := make([]SpecFile, 0, len(files))
+	for _, p := range slices.Sorted(maps.Keys(files)) {
+		out = append(out, SpecFile{Path: p, Content: string(files[p])})
+	}
+	return out
 }
 
 // ProposalUpdate is what a proposal's status change records. Date goes to
 // the field for the new status (Accepted, Applied or Closed); empty fields
 // leave what the proposal has.
 type ProposalUpdate struct {
-	Date            string
-	Commit          string
-	Branch          string
-	PR              int
-	URL             string
-	Merged          string
-	Tasks           []string
-	PendingTasks    []Task
-	PendingCharters map[string]string
-	CharterDiff     string
+	Date         string
+	Commit       string
+	Branch       string
+	PR           int
+	URL          string
+	Merged       string
+	Tasks        []string
+	PendingTasks []Task
+	SpecDiff     string
+	Revision     int
 }
 
 // Apply records the move to status to with u on p.
@@ -144,11 +174,11 @@ func (u ProposalUpdate) Apply(p *Proposal, to string) {
 	if u.PendingTasks != nil {
 		p.PendingTasks = append([]Task{}, u.PendingTasks...)
 	}
-	if u.PendingCharters != nil {
-		p.PendingCharters = maps.Clone(u.PendingCharters)
+	if u.SpecDiff != "" {
+		p.SpecDiff = u.SpecDiff
 	}
-	if u.CharterDiff != "" {
-		p.CharterDiff = u.CharterDiff
+	if u.Revision != 0 {
+		p.Revision = u.Revision
 	}
 }
 
@@ -303,12 +333,15 @@ type Store interface {
 	// SetTaskJira records the key of the task's Jira issue.
 	SetTaskJira(ctx context.Context, id, key string) error
 
-	// Charters returns the project's agent charters, by id. None means the
-	// project keeps its charters in its repository, if anywhere.
-	Charters(ctx context.Context) ([]Charter, error)
-	// PutCharters adds or replaces put and removes the charters with ids
-	// del.
-	PutCharters(ctx context.Context, put []Charter, del []string) error
+	// SpecRevision returns revision n of the project's spec, or the latest
+	// when n is 0; ErrNotFound when there is none, which means the project
+	// keeps its spec in its repository.
+	SpecRevision(ctx context.Context, n int) (*SpecRevision, error)
+	// AddSpecRevision adds r, whose N must follow the latest revision's;
+	// ErrChanged if another revision was added first.
+	AddSpecRevision(ctx context.Context, r *SpecRevision) error
+	// SpecRevisions lists the revisions, newest first, without their files.
+	SpecRevisions(ctx context.Context) ([]SpecRevision, error)
 
 	Close(ctx context.Context) error
 }

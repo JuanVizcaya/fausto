@@ -1,0 +1,20 @@
+# Copy to .env (git-ignored) and fill in.
+
+# Fausto (docker compose --profile fausto up fausto)
+# Required to edit: without it fausto is read-only.
+FAUSTO_AUTHOR="Juan Vizcaya <juanj.vizcaya@gmail.com>"
+FAUSTO_PORT=7070
+# Match your user so files fausto writes are yours (run `id -u` / `id -g`).
+FAUSTO_UID=1000
+FAUSTO_GID=1000
+
+# Jira
+FAUSTO_JIRA_URL=https://habyta.atlassian.net
+FAUSTO_JIRA_EMAIL=juanj.vizcaya@gmail.com
+FAUSTO_JIRA_PROJECT=FAUS
+FAUSTO_JIRA_TOKEN=ATATT3xFfGF06r797CEI__CqxrmNsI4c7AxNR5TtKVhxmrm5Rg1EENcxevlnAUMqDslxzSxqzP_2rbAmHrQKJjjG-Ev7qXCjDUw5b3PsmhZIeOUeAsPKNtrXI6k0XPNqLecjbMuJ38MC9ceNtE4nRsqmjv18K2VSYsbzjT-xnC_qfGoZyv4BnOw=38106345
+
+# Fausto DB
+FAUSTO_MONGO_PASSWORD=testing321$
+FAUSTO_MONGO_URI=mongodb://fausto:${FAUSTO_MONGO_PASSWORD}@localhost:27017/?authSource=admin
+FAUSTO_MONGO_DB=fausto

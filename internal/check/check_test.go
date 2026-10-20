@@ -622,21 +622,22 @@ func TestLayoutFile(t *testing.T) {
 	}
 }
 
-// Charters kept in fausto: given to RunWith, they replace the repository's,
-// and only CODEOWNERS has to match them in the repository.
-func TestChartersFromFausto(t *testing.T) {
+// A spec kept in fausto: given to RunWith, it replaces the repository's
+// system/ (here there is none), and its files count as the project's for
+// ownership. Only CODEOWNERS has to match the charters in the repository.
+func TestSpecFromFausto(t *testing.T) {
 	files := fixture(t)
 	// A project whose charters fausto keeps has no agent definitions.
 	files["system/agents/human.yaml"] = strings.Replace(files["system/agents/human.yaml"], "[system/, .claude/]", "[system/]", 1)
-	charters := map[string][]byte{}
+	kept := map[string][]byte{}
 	for name, content := range files {
-		if id, ok := strings.CutPrefix(name, "system/agents/"); ok {
-			charters[strings.TrimSuffix(id, ".yaml")] = []byte(content)
+		if strings.HasPrefix(name, "system/") {
+			kept[name] = []byte(content)
 			delete(files, name)
 		}
 	}
 	root := write(t, files)
-	report, err := RunWith(root, nil, spec.Options{Charters: charters})
+	report, err := RunWith(root, nil, spec.Options{Files: kept})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -646,9 +647,28 @@ func TestChartersFromFausto(t *testing.T) {
 		}
 	}
 
-	// Without them (as in CI), ownership can't be known: those checks are
-	// skipped, and owners aren't checked against charters.
+	// Without it, there is no spec to check against.
 	report, err = Run(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := result(t, report, "schema"); r.Status != Fail || !strings.Contains(r.Findings[0].Message, "no spec") {
+		t.Errorf("without a spec: %+v", r)
+	}
+}
+
+// With the spec in the repository but no charters (as in CI for a project
+// whose charters fausto keeps), ownership can't be known: those checks are
+// skipped, and owners aren't checked against charters.
+func TestNoCharters(t *testing.T) {
+	files := fixture(t)
+	files["system/agents/human.yaml"] = strings.Replace(files["system/agents/human.yaml"], "[system/, .claude/]", "[system/]", 1)
+	for name := range files {
+		if strings.HasPrefix(name, "system/agents/") {
+			delete(files, name)
+		}
+	}
+	report, err := Run(write(t, files), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -658,7 +678,7 @@ func TestChartersFromFausto(t *testing.T) {
 			want = Skipped
 		}
 		if r.Status != want {
-			t.Errorf("without charters, %s: status %s (want %s), findings %+v", r.Check, r.Status, want, r.Findings)
+			t.Errorf("%s: status %s (want %s), findings %+v", r.Check, r.Status, want, r.Findings)
 		}
 	}
 }

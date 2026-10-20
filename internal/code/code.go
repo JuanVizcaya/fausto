@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/JuanVizcaya/fausto/internal/check"
+	"github.com/JuanVizcaya/fausto/internal/spec"
 )
 
 // Model is the code of one component.
@@ -213,6 +214,9 @@ var ErrUnknownComponent = fmt.Errorf("unknown component")
 // when a Go or proto file changed.
 type Analyzer struct {
 	Root string
+	// Spec, when set, gives the options to read the spec with (the spec
+	// fausto keeps); otherwise the repository's own is read.
+	Spec func() (spec.Options, error)
 
 	mu    sync.Mutex
 	stamp string
@@ -221,7 +225,14 @@ type Analyzer struct {
 
 // Analyze returns the model of a component's code.
 func (a *Analyzer) Analyze(component string) (*Model, error) {
-	repo, err := check.LoadRepo(a.Root)
+	var opts spec.Options
+	if a.Spec != nil {
+		var err error
+		if opts, err = a.Spec(); err != nil {
+			return nil, err
+		}
+	}
+	repo, err := check.LoadRepo(a.Root, opts)
 	if err != nil {
 		return nil, err
 	}

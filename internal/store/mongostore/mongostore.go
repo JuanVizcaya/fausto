@@ -35,7 +35,7 @@ var _ store.Projects = (*DB)(nil)
 type Store struct {
 	proposals *mongo.Collection
 	tasks     *mongo.Collection
-	charters  *mongo.Collection
+	spec      *mongo.Collection
 }
 
 var _ store.Store = (*Store)(nil)
@@ -75,7 +75,7 @@ func (d *DB) Close(ctx context.Context) error { return d.client.Disconnect(ctx) 
 // Store returns project id's proposals and tasks, creating the tasks'
 // indexes the first time.
 func (d *DB) Store(id string) store.Store {
-	s := &Store{proposals: d.db.Collection(id + ".proposals"), tasks: d.db.Collection(id + ".tasks"), charters: d.db.Collection(id + ".charters")}
+	s := &Store{proposals: d.db.Collection(id + ".proposals"), tasks: d.db.Collection(id + ".tasks"), spec: d.db.Collection(id + ".spec")}
 	if _, done := d.indexed.Load(id); !done {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -180,6 +180,34 @@ func (d *DB) DeleteToken(ctx context.Context, label string) error {
 	return nil
 }
 
+// LegacyCharters returns the agent charters fausto kept for project id
+// before it kept whole specs, as files by path (system/agents/<id>.yaml);
+// none when there are none.
+func (d *DB) LegacyCharters(ctx context.Context, id string) (map[string][]byte, error) {
+	cur, err := d.db.Collection(id+".charters").Find(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	var docs []struct {
+		ID   string `bson:"_id"`
+		YAML string `bson:"yaml"`
+	}
+	if err := cur.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+	out := map[string][]byte{}
+	for _, c := range docs {
+		out["system/agents/"+c.ID+".yaml"] = []byte(c.YAML)
+	}
+	return out, nil
+}
+
+// DropLegacyCharters removes project id's old charters collection, once
+// its charters are part of a spec revision.
+func (d *DB) DropLegacyCharters(ctx context.Context, id string) error {
+	return d.db.Collection(id + ".charters").Drop(ctx)
+}
+
 // AdoptLegacy renames the collections fausto used before it had projects
 // ("proposals", "tasks") to project id's, so that project keeps them. It
 // reports which it renamed; it renames nothing whose target already exists.
@@ -273,10 +301,10 @@ func (s *Store) MoveProposal(ctx context.Context, id, from, to string, u store.P
 	if u.PendingTasks != nil {
 		set = append(set, bson.E{Key: "pendingTasks", Value: p.PendingTasks})
 	}
-	if u.PendingCharters != nil {
-		set = append(set, bson.E{Key: "pendingCharters", Value: p.PendingCharters})
+	add("specDiff", p.SpecDiff)
+	if p.Revision != 0 {
+		set = append(set, bson.E{Key: "revision", Value: p.Revision})
 	}
-	add("charterDiff", p.CharterDiff)
 	return s.conditional(ctx, s.proposals, id, bson.D{{Key: "status", Value: from}}, bson.D{{Key: "$set", Value: set}})
 }
 
@@ -367,33 +395,55 @@ func (s *Store) SetTaskJira(ctx context.Context, id, key string) error {
 	return nil
 }
 
-func (s *Store) Charters(ctx context.Context) ([]store.Charter, error) {
-	cur, err := s.charters.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+func (s *Store) SpecRevision(ctx context.Context, n int) (*store.SpecRevision, error) {
+	var r store.SpecRevision
+	var err error
+	if n == 0 {
+		err = s.spec.FindOne(ctx, bson.D{}, options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})).Decode(&r)
+	} else {
+		err = s.spec.FindOne(ctx, bson.D{{Key: "_id", Value: n}}).Decode(&r)
+	}
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, store.ErrNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
-	out := []store.Charter{}
+	return &r, nil
+}
+
+// AddSpecRevision inserts r once r.N follows the latest revision; the
+// unique _id stops two writers adding the same number.
+func (s *Store) AddSpecRevision(ctx context.Context, r *store.SpecRevision) error {
+	latest := 0
+	if cur, err := s.SpecRevision(ctx, 0); err == nil {
+		latest = cur.N
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	if r.N != latest+1 {
+		return store.ErrChanged
+	}
+	if r.At.IsZero() {
+		r.At = now()
+	}
+	_, err := s.spec.InsertOne(ctx, r)
+	if mongo.IsDuplicateKeyError(err) {
+		return store.ErrChanged
+	}
+	return err
+}
+
+func (s *Store) SpecRevisions(ctx context.Context) ([]store.SpecRevision, error) {
+	cur, err := s.spec.Find(ctx, bson.D{}, options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).SetProjection(bson.D{{Key: "files", Value: 0}}))
+	if err != nil {
+		return nil, err
+	}
+	out := []store.SpecRevision{}
 	if err := cur.All(ctx, &out); err != nil {
 		return nil, err
 	}
 	return out, nil
-}
-
-func (s *Store) PutCharters(ctx context.Context, put []store.Charter, del []string) error {
-	var models []mongo.WriteModel
-	t := now()
-	for _, c := range put {
-		c.Updated = t
-		models = append(models, mongo.NewReplaceOneModel().SetFilter(bson.D{{Key: "_id", Value: c.ID}}).SetReplacement(c).SetUpsert(true))
-	}
-	for _, id := range del {
-		models = append(models, mongo.NewDeleteOneModel().SetFilter(bson.D{{Key: "_id", Value: id}}))
-	}
-	if len(models) == 0 {
-		return nil
-	}
-	_, err := s.charters.BulkWrite(ctx, models)
-	return err
 }
 
 // conditional applies update to document id if it also matches cond:

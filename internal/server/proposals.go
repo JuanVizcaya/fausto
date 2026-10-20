@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 
 	"github.com/JuanVizcaya/fausto/internal/edit"
 	"github.com/JuanVizcaya/fausto/internal/proposal"
@@ -97,6 +98,40 @@ func registerProposals(mux *http.ServeMux, root string, ps *proposal.Store, js *
 			return
 		}
 		writeJSON(w, http.StatusOK, p)
+	})
+	handle("GET /api/spec/revisions", func(w http.ResponseWriter, r *http.Request) {
+		list, err := ps.DB.SpecRevisions(r.Context())
+		if err != nil {
+			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+	})
+	handle("GET /api/spec/revisions/{n}", func(w http.ResponseWriter, r *http.Request) {
+		n, err := strconv.Atoi(r.PathValue("n"))
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, errors.New("a revision is a number from 1"))
+			return
+		}
+		diff, files, changes, err := ps.RevisionDiff(r.Context(), n)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"n": n, "diff": diff, "files": files, "changes": changes})
+	})
+	handle("POST /api/spec/revisions/{n}/restore", func(w http.ResponseWriter, r *http.Request) {
+		n, err := strconv.Atoi(r.PathValue("n"))
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, errors.New("a revision is a number from 1"))
+			return
+		}
+		rev, err := ps.Restore(r.Context(), n, ps.Who())
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, rev)
 	})
 	handle("POST /api/tasks/{id}/status", func(w http.ResponseWriter, r *http.Request) {
 		var req struct {

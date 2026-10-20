@@ -74,7 +74,7 @@ func TestServe(t *testing.T) {
 	if got[0].Result.ProtocolVersion != "2025-06-18" {
 		t.Errorf("initialize: %s", lines[0])
 	}
-	if len(got[1].Result.Tools) != 5 {
+	if len(got[1].Result.Tools) != 6 {
 		t.Errorf("tools: %s", lines[1])
 	}
 	if !strings.Contains(text(2), "Build the thing.") || !strings.Contains(text(2), "id: t--platform") {

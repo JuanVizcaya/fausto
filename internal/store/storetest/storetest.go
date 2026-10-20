@@ -45,8 +45,7 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		}
 		pending := []store.Task{{ID: "t1", Agent: "platform", Status: "open", Title: "A", Body: "Do A.\n"}}
 		if err := s.MoveProposal(ctx, p.ID, "open", "accepted", store.ProposalUpdate{Date: "2026-10-03", Commit: "def",
-			Branch: "fausto/a", PR: 7, URL: "https://github.com/o/r/pull/7", PendingTasks: pending,
-			PendingCharters: map[string]string{"x": "id: x\n", "y": ""}, CharterDiff: "+id: x"}); err != nil {
+			Branch: "fausto/a", PR: 7, URL: "https://github.com/o/r/pull/7", PendingTasks: pending, SpecDiff: "+id: x"}); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.MoveProposal(ctx, p.ID, "open", "rejected", store.ProposalUpdate{}); !errors.Is(err, store.ErrChanged) {
@@ -61,14 +60,14 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		got, _ = s.Proposal(ctx, p.ID)
 		if got.Status != "accepted" || got.Accepted != "2026-10-03" || got.Commit != "def" || got.Branch != "fausto/a" || got.PR != 7 ||
 			got.URL != "https://github.com/o/r/pull/7" || len(got.PendingTasks) != 1 || got.PendingTasks[0].Body != "Do A.\n" || len(got.Tasks) != 0 ||
-			len(got.PendingCharters) != 2 || got.PendingCharters["y"] != "" || got.CharterDiff != "+id: x" {
+			got.SpecDiff != "+id: x" {
 			t.Errorf("accepted = %+v", got)
 		}
-		if err := s.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: "2026-10-04", Merged: "fed", Tasks: []string{"t1"}}); err != nil {
+		if err := s.MoveProposal(ctx, p.ID, "accepted", "applied", store.ProposalUpdate{Date: "2026-10-04", Merged: "fed", Tasks: []string{"t1"}, Revision: 4}); err != nil {
 			t.Fatal(err)
 		}
 		got, _ = s.Proposal(ctx, p.ID)
-		if got.Status != "applied" || got.Applied != "2026-10-04" || got.Merged != "fed" || got.Commit != "def" || got.PR != 7 || !slices.Equal(got.Tasks, []string{"t1"}) {
+		if got.Status != "applied" || got.Applied != "2026-10-04" || got.Merged != "fed" || got.Commit != "def" || got.PR != 7 || !slices.Equal(got.Tasks, []string{"t1"}) || got.Revision != 4 {
 			t.Errorf("applied = %+v", got)
 		}
 		if err := s.MoveProposal(ctx, "2026-10-02-b", "open", "rejected", store.ProposalUpdate{Date: "2026-10-05"}); err != nil {
@@ -82,20 +81,39 @@ func Run(t *testing.T, open func(t *testing.T) store.Store) {
 		}
 	})
 
-	t.Run("charters", func(t *testing.T) {
+	t.Run("spec revisions", func(t *testing.T) {
 		s := open(t)
-		if got, err := s.Charters(ctx); err != nil || len(got) != 0 {
-			t.Errorf("no charters = %+v, %v", got, err)
+		if _, err := s.SpecRevision(ctx, 0); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("no revisions: err = %v", err)
 		}
-		if err := s.PutCharters(ctx, []store.Charter{{ID: "b", YAML: "id: b\n"}, {ID: "a", YAML: "id: a\n"}}, nil); err != nil {
+		r1 := &store.SpecRevision{N: 1, By: "Me", Message: "import", Files: []store.SpecFile{{Path: "system/system.yaml", Content: "name: a\n"}}}
+		if err := s.AddSpecRevision(ctx, r1); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.PutCharters(ctx, []store.Charter{{ID: "a", YAML: "id: a\nname: A\n"}}, []string{"b", "nope"}); err != nil {
+		if err := s.AddSpecRevision(ctx, &store.SpecRevision{N: 1}); !errors.Is(err, store.ErrChanged) {
+			t.Errorf("revision 1 twice: err = %v", err)
+		}
+		if err := s.AddSpecRevision(ctx, &store.SpecRevision{N: 3}); !errors.Is(err, store.ErrChanged) {
+			t.Errorf("revision 3 after 1: err = %v", err)
+		}
+		r2 := &store.SpecRevision{N: 2, By: "Me", Proposal: "p", Message: "change", Files: []store.SpecFile{
+			{Path: "system/system.yaml", Content: "name: b\n"}, {Path: "system/agents/x.yaml", Content: "id: x\n"}}}
+		if err := s.AddSpecRevision(ctx, r2); err != nil {
 			t.Fatal(err)
 		}
-		got, err := s.Charters(ctx)
-		if err != nil || len(got) != 1 || got[0].ID != "a" || got[0].YAML != "id: a\nname: A\n" || got[0].Updated.IsZero() {
-			t.Errorf("charters = %+v, %v", got, err)
+		latest, err := s.SpecRevision(ctx, 0)
+		if err != nil || latest.N != 2 || latest.FileMap()["system/agents/x.yaml"] == nil || latest.At.IsZero() {
+			t.Errorf("latest = %+v, %v", latest, err)
+		}
+		if first, err := s.SpecRevision(ctx, 1); err != nil || string(first.FileMap()["system/system.yaml"]) != "name: a\n" {
+			t.Errorf("revision 1 = %+v, %v", first, err)
+		}
+		if _, err := s.SpecRevision(ctx, 9); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("revision 9: err = %v", err)
+		}
+		list, err := s.SpecRevisions(ctx)
+		if err != nil || len(list) != 2 || list[0].N != 2 || list[0].Proposal != "p" || len(list[0].Files) != 0 {
+			t.Errorf("revisions = %+v, %v", list, err)
 		}
 	})
 

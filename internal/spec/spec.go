@@ -34,8 +34,11 @@ type Spec struct {
 	Decisions    []Decision
 	// Layout is where the project keeps its code (see LayoutFile).
 	Layout Layout
-	// Charters says where the agent charters came from: ChartersInRepo,
-	// ChartersInFausto, or "" when there are none, so ownership is unknown.
+	// Source says where the spec came from: ChartersInRepo (the
+	// repository's system/) or ChartersInFausto (fausto's database).
+	Source string
+	// Charters says where the agent charters came from, the same as Source,
+	// or "" when there are none, so ownership is unknown.
 	Charters string
 	// Documents holds every file in JSON-compatible form, for schema validation.
 	Documents []Document
@@ -350,17 +353,21 @@ func (c *Component) Uses(target string, protocols ...string) bool {
 	return false
 }
 
-// Where agent charters come from.
+// Where a spec, and its agent charters, come from.
 const (
-	ChartersInRepo   = "repo"   // system/agents/*.yaml in the repository
+	ChartersInRepo   = "repo"   // system/ in the repository
 	ChartersInFausto = "fausto" // fausto's database
 )
 
+// ErrNoSpec means there is no spec to load: no system/ in the repository,
+// and none from fausto.
+var ErrNoSpec = errors.New("no spec: the repository has no " + Dir + "/system.yaml, and fausto keeps no spec for it")
+
 // Options change how Load reads a spec.
 type Options struct {
-	// Charters, when not nil, are the agent charters (YAML, by agent id)
-	// fausto keeps for the project; they replace any under system/agents/.
-	Charters map[string][]byte
+	// Files, when not nil, are the spec's files by path (system/...), as
+	// fausto keeps them; the repository's system/ is then not read.
+	Files map[string][]byte
 	// Layout, when not nil, overrides the fields of the project's layout
 	// that it sets.
 	Layout *Layout
@@ -378,6 +385,14 @@ func Load(root string) (*Spec, error) { return LoadWith(root, Options{}) }
 // LoadWith is Load with options.
 func LoadWith(root string, o Options) (*Spec, error) {
 	s := &Spec{}
+	var src specSource = dirSource(root)
+	s.Source = ChartersInRepo
+	if o.Files != nil {
+		src = mapSource(o.Files)
+		s.Source = ChartersInFausto
+	} else if _, err := os.Stat(filepath.Join(root, Dir, "system.yaml")); errors.Is(err, os.ErrNotExist) {
+		return nil, ErrNoSpec
+	}
 	var errs []error
 	layout, err := LoadLayout(root)
 	if o.Layout != nil {
@@ -401,7 +416,7 @@ func LoadWith(root string, o Options) (*Spec, error) {
 	}
 	for _, f := range single {
 		rel := filepath.ToSlash(filepath.Join(Dir, f.name))
-		data, err := os.ReadFile(filepath.Join(root, rel))
+		data, err := src.read(rel)
 		if f.optional && errors.Is(err, os.ErrNotExist) {
 			continue
 		}
@@ -417,34 +432,17 @@ func LoadWith(root string, o Options) (*Spec, error) {
 		s.Documents = append(s.Documents, Document{Path: rel, Schema: f.schema, Value: v})
 	}
 
-	charters := map[string][]byte{}
-	if o.Charters != nil {
-		for id, data := range o.Charters {
-			charters[AgentFile(id)] = data
-		}
-		s.Charters = ChartersInFausto
-	} else {
-		agentFiles, err := listFiles(root, "agents", ".yaml")
-		errs = append(errs, err)
-		for _, rel := range agentFiles {
-			data, err := os.ReadFile(filepath.Join(root, rel))
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-			charters[rel] = data
-		}
-		if len(charters) > 0 {
-			s.Charters = ChartersInRepo
-		}
+	agentFiles, err := src.list(Dir+"/agents", ".yaml")
+	errs = append(errs, err)
+	if len(agentFiles) > 0 {
+		s.Charters = s.Source
 	}
-	agentFiles := make([]string, 0, len(charters))
-	for rel := range charters {
-		agentFiles = append(agentFiles, rel)
-	}
-	sort.Strings(agentFiles)
 	for _, rel := range agentFiles {
-		data := charters[rel]
+		data, err := src.read(rel)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		var a Agent
 		v, err := decode(rel, data, &a)
 		if err != nil {
@@ -456,10 +454,10 @@ func LoadWith(root string, o Options) (*Spec, error) {
 		s.Documents = append(s.Documents, Document{Path: rel, Schema: "agent.schema.json", Value: v})
 	}
 
-	decisionFiles, err := listFiles(root, "decisions", ".md")
+	decisionFiles, err := src.list(Dir+"/decisions", ".md")
 	errs = append(errs, err)
 	for _, rel := range decisionFiles {
-		data, err := os.ReadFile(filepath.Join(root, rel))
+		data, err := src.read(rel)
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -485,10 +483,69 @@ func LoadWith(root string, o Options) (*Spec, error) {
 	return s, nil
 }
 
-// listFiles returns the files in system/<sub> with the given extension,
-// sorted, as paths relative to root. A missing directory is not an error.
-func listFiles(root, sub, ext string) ([]string, error) {
-	return listDir(root, Dir+"/"+sub, ext)
+// specSource is where LoadWith reads the spec's files: a directory, or the
+// files fausto keeps.
+type specSource interface {
+	read(rel string) ([]byte, error)
+	// list returns the files directly in dir with the extension, sorted;
+	// a missing directory is not an error.
+	list(dir, ext string) ([]string, error)
+}
+
+type dirSource string
+
+func (d dirSource) read(rel string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(string(d), filepath.FromSlash(rel)))
+}
+
+func (d dirSource) list(dir, ext string) ([]string, error) { return listDir(string(d), dir, ext) }
+
+type mapSource map[string][]byte
+
+func (m mapSource) read(rel string) ([]byte, error) {
+	data, ok := m[rel]
+	if !ok {
+		return nil, fmt.Errorf("%s: not in fausto's spec: %w", rel, os.ErrNotExist)
+	}
+	return data, nil
+}
+
+func (m mapSource) list(dir, ext string) ([]string, error) {
+	var out []string
+	for p := range m {
+		if name, ok := strings.CutPrefix(p, dir+"/"); ok && !strings.Contains(name, "/") && strings.HasSuffix(name, ext) {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// ReadDir reads every spec file under root's system/, by path (system/...):
+// what fausto keeps for a project.
+func ReadDir(root string) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	base := filepath.Join(root, Dir)
+	err := filepath.WalkDir(base, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		ext := filepath.Ext(p)
+		if ext != ".yaml" && ext != ".yml" && ext != ".md" {
+			return nil
+		}
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, p)
+		out[filepath.ToSlash(rel)] = data
+		return nil
+	})
+	return out, err
 }
 
 // listDir returns the files in dir (relative to root) with the given

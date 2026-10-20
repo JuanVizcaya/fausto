@@ -161,23 +161,16 @@ func runToken(args []string, stdout, stderr io.Writer) int {
 	return 2
 }
 
-// hasCharter reports whether the project has agent id: among the charters
-// fausto keeps, else in the clone at root (unknown without one).
+// hasCharter reports whether the project has agent id: in the spec fausto
+// keeps, else in the clone at root (unknown without one).
 func hasCharter(ctx context.Context, db store.Store, root, id string) bool {
-	kept, err := db.Charters(ctx)
-	if err == nil && len(kept) > 0 {
-		for _, c := range kept {
-			if c.ID == id {
-				return true
-			}
-		}
-		return false
+	var s *spec.Spec
+	if rev, err := db.SpecRevision(ctx, 0); err == nil {
+		s, _ = spec.LoadWith(root, spec.Options{Files: rev.FileMap()})
+	} else if root != "" {
+		s, _ = spec.Load(root)
 	}
-	if root == "" {
-		return true
-	}
-	s, err := spec.Load(root)
-	if err != nil {
+	if s == nil {
 		return true
 	}
 	for _, a := range s.Agents {

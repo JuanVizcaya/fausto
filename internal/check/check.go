@@ -106,13 +106,29 @@ func RunWith(root string, names []string, o spec.Options) (*Report, error) {
 			return nil, fmt.Errorf("unknown check %q (available: %s)", n, strings.Join(Names(), ", "))
 		}
 	}
-	files, err := ListFiles(root)
+	files, err := projectFiles(root, o)
 	if err != nil {
 		return nil, err
 	}
 	s, loadErr := spec.LoadWith(root, o)
 	repo := &Repo{Root: root, Spec: s, Files: files}
 	return run(repo, loadErr, names), nil
+}
+
+// projectFiles returns the project's files: the repository's, and, for a
+// spec fausto keeps, the spec's in place of any system/ in the repository,
+// so ownership covers the spec wherever it lives.
+func projectFiles(root string, o spec.Options) ([]string, error) {
+	files, err := ListFiles(root)
+	if err != nil || o.Files == nil {
+		return files, err
+	}
+	files = slices.DeleteFunc(files, func(f string) bool { return strings.HasPrefix(f, spec.Dir+"/") })
+	for p := range o.Files {
+		files = append(files, p)
+	}
+	sort.Strings(files)
+	return files, nil
 }
 
 func run(repo *Repo, loadErr error, names []string) *Report {
@@ -276,13 +292,13 @@ func (r *Repo) isEventContract(owner *spec.Component, ct *spec.Contract) bool {
 	return false
 }
 
-// LoadRepo lists the repository's files and loads its spec.
-func LoadRepo(root string) (*Repo, error) {
-	files, err := ListFiles(root)
+// LoadRepo lists the repository's files and loads its spec, read with o.
+func LoadRepo(root string, o spec.Options) (*Repo, error) {
+	files, err := projectFiles(root, o)
 	if err != nil {
 		return nil, err
 	}
-	s, err := spec.Load(root)
+	s, err := spec.LoadWith(root, o)
 	if err != nil {
 		return nil, err
 	}

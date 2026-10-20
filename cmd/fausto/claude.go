@@ -103,6 +103,10 @@ func startAgent(ctx context.Context, root, agent, dir, base string, extra []stri
 	if code := pullTasks(ctx, apiTasks{c, me}, dir, agent, stdout, stderr); code != 0 {
 		return errors.New("pulling the tasks failed")
 	}
+	// The spec fausto keeps, where the agent reads it.
+	if _, err := pullSpecWith(ctx, c, dir, stdout); err != nil {
+		return err
+	}
 
 	def, err := c.Definition(ctx)
 	if err != nil {

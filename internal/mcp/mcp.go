@@ -29,6 +29,9 @@ type Server struct {
 	// isn't connected, which only the check tool works without.
 	Client  *client.Client
 	Version string
+	// Refresh, when set, runs before fausto_tasks answers, to bring the
+	// clone's copy of the spec up to date (see `fausto spec pull`).
+	Refresh func(context.Context) error
 
 	mu sync.Mutex // one response at a time on out
 }
@@ -144,6 +147,10 @@ var tools = []tool{
 	{"fausto_task_start", "Mark one of your tasks in progress, when you start working on it.", idSchema},
 	{"fausto_task_done", "Mark one of your tasks done: only once fausto_check passes for your area and your work is committed on your branch.", idSchema},
 	{"fausto_task_drop", "Drop one of your tasks that turned out not to need doing; say why in your summary.", idSchema},
+	{"fausto_spec", "The architecture spec fausto keeps for this project: with a path (such as system/system.yaml), that file; without one, the list of files. A copy is also in system/ after `fausto spec pull`.",
+		map[string]any{"type": "object", "properties": map[string]any{
+			"path": map[string]any{"type": "string", "description": "A spec file, such as system/system.yaml or system/decisions/0001-....md."},
+		}}},
 	{"fausto_check", "Run fausto's drift checks on this clone: the code against the architecture spec in system/. Name checks to run only those.",
 		map[string]any{"type": "object", "properties": map[string]any{
 			"checks": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": check.Names()}},
@@ -155,6 +162,7 @@ var errNotConnected = errors.New("this clone isn't connected to fausto: run `fau
 func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (string, error) {
 	var a struct {
 		ID     string   `json:"id"`
+		Path   string   `json:"path"`
 		Status []string `json:"status"`
 		Checks []string `json:"checks"`
 	}
@@ -167,6 +175,11 @@ func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (s
 	case "fausto_tasks":
 		if s.Client == nil {
 			return "", errNotConnected
+		}
+		if s.Refresh != nil {
+			if err := s.Refresh(ctx); err != nil {
+				return "", fmt.Errorf("refresh the spec in %s/: %w", spec.Dir, err)
+			}
 		}
 		statuses := a.Status
 		if len(statuses) == 0 {
@@ -200,6 +213,30 @@ func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (s
 			return "", err
 		}
 		return fmt.Sprintf("%s: %s → %s", a.ID, from, status), nil
+	case "fausto_spec":
+		if s.Client == nil {
+			return "", errNotConnected
+		}
+		files, rev, err := s.Client.Spec(ctx)
+		if err != nil {
+			return "", err
+		}
+		if files == nil {
+			return "", errors.New("fausto keeps no spec for this project: it is in the repository's " + spec.Dir + "/")
+		}
+		if a.Path == "" {
+			paths := make([]string, 0, len(files))
+			for p := range files {
+				paths = append(paths, p)
+			}
+			slices.Sort(paths)
+			return fmt.Sprintf("Spec revision %d:\n%s", rev, strings.Join(paths, "\n")), nil
+		}
+		data, ok := files[a.Path]
+		if !ok {
+			return "", fmt.Errorf("no %s in the spec; call fausto_spec without a path for the list", a.Path)
+		}
+		return string(data), nil
 	case "fausto_check":
 		if s.Root == "" {
 			return "", errors.New("not in a project clone: no " + spec.Dir + "/system.yaml here or above")
@@ -211,11 +248,11 @@ func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (s
 		}
 		var opts spec.Options
 		if s.Client != nil {
-			ch, err := s.Client.Charters(ctx)
+			files, _, err := s.Client.Spec(ctx)
 			if err != nil {
 				return "", err
 			}
-			opts.Charters = ch
+			opts.Files = files
 		}
 		report, err := check.RunWith(s.Root, a.Checks, opts)
 		if err != nil {

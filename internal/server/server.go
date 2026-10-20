@@ -90,7 +90,12 @@ func New(o Options) *Handler {
 			return
 		}
 		v := view(s)
-		v.Charters = s.Charters
+		v.Charters, v.Source = s.Charters, s.Source
+		if proposals != nil {
+			if rev, err := proposals.DB.SpecRevision(r.Context(), 0); err == nil {
+				v.Revision = rev.N
+			}
+		}
 		// Tasks live in the database, not the spec; the UI gets them along.
 		if proposals != nil {
 			if v.Tasks, err = proposals.DB.Tasks(r.Context(), store.TaskFilter{}); err != nil {
@@ -140,6 +145,9 @@ func New(o Options) *Handler {
 		writeJSON(w, http.StatusOK, out)
 	})
 	analyzer := &code.Analyzer{Root: root}
+	if proposals != nil {
+		analyzer.Spec = func() (spec.Options, error) { return proposals.SpecOptions(context.Background()) }
+	}
 	mux.HandleFunc("GET /api/code/{component}", func(w http.ResponseWriter, r *http.Request) {
 		m, err := analyzer.Analyze(r.PathValue("component"))
 		switch {
@@ -192,8 +200,11 @@ type specView struct {
 	Decisions    []decisionView    `json:"decisions"`
 	Tasks        []store.Task      `json:"tasks"`
 	// Charters is where the agent charters are kept: "repo", "fausto", or
-	// "" when there are none.
+	// "" when there are none. Source is where the spec is kept, and
+	// Revision its revision when fausto keeps it.
 	Charters string `json:"charters"`
+	Source   string `json:"source"`
+	Revision int    `json:"revision,omitempty"`
 }
 
 type agentView struct {

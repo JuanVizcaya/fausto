@@ -70,8 +70,12 @@ func TestAgentAPI(t *testing.T) {
 	if got.Status != "in-progress" || len(got.History) != 1 || !strings.HasPrefix(got.History[0].By, "agent platform (fausto_") {
 		t.Errorf("task = %+v", got)
 	}
-	if rec := call("GET", "/api/agent/charters", secret, ""); !strings.Contains(rec.Body.String(), `"charters":{}`) {
-		t.Errorf("charters (kept in the repository) = %s", rec.Body)
+	if rec := call("GET", "/api/agent/spec", secret, ""); !strings.Contains(rec.Body.String(), `"files":{}`) {
+		t.Errorf("spec (kept in the repository) = %s", rec.Body)
+	}
+	db.AddSpecRevision(ctx, &store.SpecRevision{N: 1, Files: []store.SpecFile{{Path: "system/system.yaml", Content: "name: x\n"}}})
+	if rec := call("GET", "/api/agent/spec", secret, ""); !strings.Contains(rec.Body.String(), `"revision":1`) || !strings.Contains(rec.Body.String(), `"system/system.yaml":"name: x\n"`) {
+		t.Errorf("spec (kept in fausto) = %s", rec.Body)
 	}
 	if err := reg.DeleteToken(ctx, tok.Label); err != nil {
 		t.Fatal(err)

@@ -29,7 +29,14 @@ func runMCP(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := (&mcp.Server{Root: root, Client: c, Version: version}).Serve(ctx, stdin, stdout); err != nil {
+	srv := &mcp.Server{Root: root, Client: c, Version: version}
+	if c != nil && root != "" {
+		srv.Refresh = func(ctx context.Context) error {
+			_, err := pullSpecWith(ctx, c, root, io.Discard)
+			return err
+		}
+	}
+	if err := srv.Serve(ctx, stdin, stdout); err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}

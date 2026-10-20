@@ -94,19 +94,23 @@ func registerAgentAPI(mux *http.ServeMux, project, root string, ps *proposal.Sto
 			"agent": a.ID, "description": description, "prompt": prompt, "markdown": string(agentdef.Render(s, a)),
 		})
 	})
-	handle("GET /api/agent/charters", func(w http.ResponseWriter, r *http.Request, t *store.Token) {
-		// The charters fausto keeps, for checks run where the agent works;
-		// none when the project keeps its own.
-		opts, err := ps.SpecOptions(r.Context())
+	handle("GET /api/agent/spec", func(w http.ResponseWriter, r *http.Request, t *store.Token) {
+		// The spec fausto keeps, by path, for the agent to read and to run
+		// the checks where it works; none when the project keeps its own.
+		rev, err := ps.DB.SpecRevision(r.Context(), 0)
+		if errors.Is(err, store.ErrNotFound) {
+			writeJSON(w, http.StatusOK, map[string]any{"revision": 0, "files": map[string]string{}})
+			return
+		}
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
 		}
-		out := map[string]string{}
-		for id, data := range opts.Charters {
-			out[id] = string(data)
+		files := map[string]string{}
+		for _, f := range rev.Files {
+			files[f.Path] = f.Content
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"charters": out})
+		writeJSON(w, http.StatusOK, map[string]any{"revision": rev.N, "files": files})
 	})
 	handle("GET /api/agent/tasks", func(w http.ResponseWriter, r *http.Request, t *store.Token) {
 		f := store.TaskFilter{Agent: t.Agent}

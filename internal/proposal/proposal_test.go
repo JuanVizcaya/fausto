@@ -633,79 +633,96 @@ func TestOldAcceptedProposalBecomesApplied(t *testing.T) {
 	}
 }
 
-// keepCharters moves the example's charters into the database, as
-// `fausto charters import` does.
-func keepCharters(t *testing.T, s *Store) {
+// keepSpec moves the example's spec into the database as revision 1, as
+// `fausto spec import` does.
+func keepSpec(t *testing.T, s *Store) {
 	t.Helper()
-	ch, err := dirCharters(s.Root())
-	if err != nil || len(ch) == 0 {
-		t.Fatalf("charters = %v, %v", ch, err)
+	files, err := spec.ReadDir(s.Root())
+	if err != nil || len(files) == 0 {
+		t.Fatalf("spec files = %v, %v", len(files), err)
 	}
-	var put []store.Charter
-	for id, data := range ch {
-		put = append(put, store.Charter{ID: id, YAML: string(data)})
-	}
-	if err := s.DB.PutCharters(ctx, put, nil); err != nil {
+	if err := s.DB.AddSpecRevision(ctx, &store.SpecRevision{N: 1, Files: store.SpecFiles(files), By: "Test", Message: "import"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func charter(t *testing.T, s *Store, id string) string {
+// keptFile returns a file of the latest kept revision.
+func keptFile(t *testing.T, s *Store, path string) string {
 	t.Helper()
-	list, _ := s.DB.Charters(ctx)
-	for _, c := range list {
-		if c.ID == id {
-			return c.YAML
-		}
+	r, err := s.DB.SpecRevision(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return ""
+	return string(r.FileMap()[path])
+}
+
+func keptSpec(t *testing.T, s *Store) *spec.Spec {
+	t.Helper()
+	sp, err := s.specAt(ctx, 0)
+	if err != nil || sp == nil {
+		t.Fatalf("kept spec: %v", err)
+	}
+	return sp
 }
 
 func agentChange(t *testing.T, s *Store, id, scope string) edit.Change {
 	t.Helper()
-	sp := currentSpec(t, s)
+	sp := keptSpec(t, s)
 	i := slices.IndexFunc(sp.Agents, func(a spec.Agent) bool { return a.ID == id })
 	a := sp.Agents[i]
 	a.Scope = scope
 	return edit.Change{Kind: "agent", ID: id, Value: raw(t, a)}
 }
 
-// With charters in fausto, a proposal that only changes one has nothing
-// to merge: accepting it applies it, in the database alone.
-func TestKeptCharterOnlyAppliesNow(t *testing.T) {
+func componentChange(t *testing.T, s *Store, id, status string) edit.Change {
+	t.Helper()
+	c := *keptSpec(t, s).Component(id)
+	c.Status = status
+	return edit.Change{Kind: "component", ID: id, Value: raw(t, c)}
+}
+
+// With the spec in fausto, a proposal that changes nothing in the
+// repository has nothing to merge: accepting it writes a new revision.
+func TestKeptSpecAppliesNow(t *testing.T) {
 	s := newRepo(t)
-	keepCharters(t, s)
+	keepSpec(t, s)
 	head := run(t, s.Root(), "rev-parse", "HEAD")
 	d, err := s.Create(ctx, "Widen platform", "", "", []edit.Change{agentChange(t, s, "platform", "Platform, and the CI workflows.")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(d.Changes) != 1 || d.Changes[0].Kind != "agent" || !strings.Contains(d.Diff, "Platform, and the CI workflows.") {
-		t.Errorf("open detail: changes %+v, diff:\n%s", d.Changes, d.Diff)
+	if d.BaseRevision != 1 || len(d.Changes) != 1 || d.Changes[0].Kind != "agent" || !strings.Contains(d.Diff, "Platform, and the CI workflows.") {
+		t.Errorf("open detail: base %d, changes %+v, diff:\n%s", d.BaseRevision, d.Changes, d.Diff)
 	}
 	p, err := s.Approve(ctx, d.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Status != "applied" || p.Branch != "" || p.Commit != "" {
+	if p.Status != "applied" || p.Branch != "" || p.Commit != "" || p.Revision != 2 {
 		t.Errorf("proposal = %+v", p)
 	}
-	if !strings.Contains(charter(t, s, "platform"), "Platform, and the CI workflows.") {
-		t.Errorf("platform's charter = %q", charter(t, s, "platform"))
+	if !strings.Contains(keptFile(t, s, "system/agents/platform.yaml"), "Platform, and the CI workflows.") {
+		t.Error("revision 2 lacks the change")
 	}
 	if run(t, s.Root(), "rev-parse", "HEAD") != head || run(t, s.Root(), "branch", "--list", BranchPrefix+"*") != "" {
-		t.Error("a charter change reached git")
+		t.Error("a spec change reached git")
 	}
-	if got, err := s.Detail(ctx, d.ID); err != nil || len(got.Changes) != 1 || got.Changes[0].ID != "platform" || !strings.Contains(got.Diff, "CI workflows") {
+	got, err := s.Detail(ctx, d.ID)
+	if err != nil || len(got.Changes) != 1 || got.Changes[0].ID != "platform" || !strings.Contains(got.Diff, "CI workflows") ||
+		!slices.Contains(got.Files, "system/agents/platform.yaml") {
 		t.Errorf("applied detail = %+v, %v", got, err)
+	}
+	r, _ := s.DB.SpecRevision(ctx, 2)
+	if r.Proposal != d.ID || r.Message != "Widen platform" {
+		t.Errorf("revision 2 = %+v", r)
 	}
 }
 
-// A proposal that changes the spec and a charter puts only the spec on its
-// branch; the charter is written when the branch is merged.
-func TestKeptCharterWaitsForMerge(t *testing.T) {
+// A spec change that changes CODEOWNERS too puts only CODEOWNERS on its
+// branch; the spec's revision is written when the branch is merged.
+func TestKeptSpecWaitsForMerge(t *testing.T) {
 	s := newRepo(t)
-	keepCharters(t, s)
+	keepSpec(t, s)
 	d, err := s.Create(ctx, "Plan billing", "", "", []edit.Change{
 		{Kind: "agent", Value: json.RawMessage(`{"id":"billing","name":"Billing agent","kind":"agent","scope":"Billing.","owns":["backend/internal/billing/"]}`)},
 		{Kind: "component", Value: json.RawMessage(`{"id":"billing","name":"Billing service","kind":"service","layer":"domain","status":"planned","owner":"billing"}`)},
@@ -716,67 +733,114 @@ func TestKeptCharterWaitsForMerge(t *testing.T) {
 	if d.Conflict != "" {
 		t.Fatalf("conflict: %s", d.Conflict)
 	}
-	if plan(d, "billing") == nil {
-		t.Errorf("no task for the new agent: %+v", d.Plans)
-	}
 	p, err := s.Approve(ctx, d.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range strings.Fields(run(t, s.Root(), "diff", "--name-only", p.Commit+"^", p.Commit)) {
-		if strings.HasPrefix(f, "system/agents/") || strings.HasPrefix(f, ".claude/agents/") {
-			t.Errorf("the branch's commit has %s", f)
-		}
+	if files := strings.Fields(run(t, s.Root(), "diff", "--name-only", p.Commit+"^", p.Commit)); !slices.Equal(files, []string{".github/CODEOWNERS"}) {
+		t.Errorf("the branch's commit has %v, want only CODEOWNERS", files)
 	}
-	if charter(t, s, "billing") != "" {
-		t.Error("the charter was written before the merge")
+	if keptFile(t, s, "system/agents/billing.yaml") != "" {
+		t.Error("the spec changed before the merge")
 	}
 	run(t, s.Root(), "merge", "-q", "--ff-only", p.Branch)
 	if res, err := s.Sync(ctx); err != nil || len(res) != 1 || res[0].Status != "applied" {
 		t.Fatalf("sync = %+v, %v", res, err)
 	}
-	if !strings.Contains(charter(t, s, "billing"), "Billing agent") {
-		t.Errorf("billing's charter after the merge = %q", charter(t, s, "billing"))
+	if !strings.Contains(keptFile(t, s, "system/agents/billing.yaml"), "Billing agent") || keptSpec(t, s).Component("billing") == nil {
+		t.Error("the spec after the merge lacks billing")
 	}
 	if tasks, _ := s.DB.Tasks(ctx, store.TaskFilter{Agent: "billing"}); len(tasks) != 1 {
 		t.Errorf("billing's tasks = %+v", tasks)
 	}
 }
 
-// A charter changed in fausto after a proposal touching it was made makes
-// the proposal stale; so does another accepted proposal changing it.
-func TestKeptCharterConflicts(t *testing.T) {
+// Two proposals changing different components of system.yaml both land:
+// applying re-applies each one's edits to the latest revision.
+func TestKeptSpecMergesEdits(t *testing.T) {
 	s := newRepo(t)
-	keepCharters(t, s)
+	keepSpec(t, s)
+	a, err := s.Create(ctx, "Activate web", "", "", []edit.Change{componentChange(t, s, "web", "active")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.Create(ctx, "Deprecate dummy", "", "", []edit.Change{componentChange(t, s, "dummy", "deprecated")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{a.ID, b.ID} {
+		if p, err := s.Approve(ctx, id); err != nil || p.Status != "applied" {
+			t.Fatalf("approve %s = %+v, %v", id, p, err)
+		}
+	}
+	sp := keptSpec(t, s)
+	if sp.Component("web").Status != "active" || sp.Component("dummy").Status != "deprecated" {
+		t.Errorf("web %s, dummy %s: both changes should be in", sp.Component("web").Status, sp.Component("dummy").Status)
+	}
+	if r, _ := s.DB.SpecRevision(ctx, 0); r.N != 3 {
+		t.Errorf("latest revision %d, want 3", r.N)
+	}
+}
+
+// An item changed in fausto after a proposal touching it was made makes
+// the proposal stale.
+func TestKeptSpecStale(t *testing.T) {
+	s := newRepo(t)
+	keepSpec(t, s)
 	d, err := s.Create(ctx, "Narrow residents", "", "", []edit.Change{agentChange(t, s, "residents", "Residents only.")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.DB.PutCharters(ctx, []store.Charter{{ID: "residents", YAML: charter(t, s, "residents") + "# edited\n"}}, nil); err != nil {
+	other, err := s.Create(ctx, "Widen residents", "", "", []edit.Change{agentChange(t, s, "residents", "Residents, and more.")})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := s.Detail(ctx, d.ID); !strings.Contains(got.Conflict, "agent `residents` changed in fausto") {
+	if _, err := s.Approve(ctx, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Detail(ctx, d.ID)
+	if !strings.Contains(got.Conflict, "agent `residents` changed in fausto") {
 		t.Errorf("conflict = %q", got.Conflict)
 	}
-
-	// Two proposals with a spec change each (so neither applies at once)
-	// and the same charter.
-	propose := func(title, tech, scope string) string {
-		d, err := s.Create(ctx, title, "", "", []edit.Change{
-			agentChange(t, s, "gateway", scope),
-			{Kind: "technology", Value: json.RawMessage(`{"id":"` + tech + `","name":"` + tech + `","category":"infrastructure","status":"assess"}`)},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return d.ID
+	var ce *ConflictError
+	if _, err := s.Approve(ctx, d.ID); !errors.As(err, &ce) {
+		t.Errorf("approve stale: err = %v", err)
 	}
-	a, b := propose("A", "nats", "Gateway A."), propose("B", "kafka", "Gateway B.")
-	if _, err := s.Approve(ctx, a); err != nil {
+}
+
+func TestRevisionDiff(t *testing.T) {
+	s := newRepo(t)
+	keepSpec(t, s)
+	d, _ := s.Create(ctx, "Activate web", "", "", []edit.Change{componentChange(t, s, "web", "active")})
+	if _, err := s.Approve(ctx, d.ID); err != nil {
 		t.Fatal(err)
 	}
+	diff, files, changes, err := s.RevisionDiff(ctx, 2)
+	if err != nil || !slices.Equal(files, []string{"system/system.yaml"}) || len(changes) != 1 || changes[0].ID != "web" ||
+		!strings.Contains(diff, "+++ b/system/system.yaml") {
+		t.Errorf("revision 2: files %v, changes %+v, err %v, diff:\n%s", files, changes, err, diff)
+	}
+	if _, files, _, err := s.RevisionDiff(ctx, 1); err != nil || len(files) < 10 {
+		t.Errorf("revision 1 (the import) adds every file: %v, %v", files, err)
+	}
+}
+
+func TestRestore(t *testing.T) {
+	s := newRepo(t)
+	keepSpec(t, s)
+	d, _ := s.Create(ctx, "Activate web", "", "", []edit.Change{componentChange(t, s, "web", "active")})
+	if _, err := s.Approve(ctx, d.ID); err != nil {
+		t.Fatal(err)
+	}
+	r, err := s.Restore(ctx, 1, "Test <test@example.com>")
+	if err != nil || r.N != 3 || r.Message != "Restore revision 1" {
+		t.Fatalf("restore = %+v, %v", r, err)
+	}
+	if keptSpec(t, s).Component("web").Status == "active" {
+		t.Error("revision 3 still has revision 2's change")
+	}
 	var ce *ConflictError
-	if _, err := s.Approve(ctx, b); !errors.As(err, &ce) || !strings.Contains(ce.Reason, "waiting for its merge") {
-		t.Errorf("approve b: %v", err)
+	if _, err := s.Restore(ctx, 3, "Test"); !errors.As(err, &ce) {
+		t.Errorf("restoring the current revision: err = %v", err)
 	}
 }
