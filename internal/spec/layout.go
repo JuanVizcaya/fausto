@@ -31,6 +31,21 @@ type Layout struct {
 // DefaultLayout is the layout of a project without a LayoutFile.
 var DefaultLayout = Layout{CommandsDir: "backend/cmd", ComposeFile: "compose.yaml", ProtoRoot: "proto"}
 
+// With returns l with the fields o sets.
+func (l Layout) With(o Layout) Layout {
+	for _, f := range []struct {
+		dst *string
+		v   string
+	}{
+		{&l.CommandsDir, o.CommandsDir}, {&l.ComposeFile, o.ComposeFile}, {&l.ProtoRoot, o.ProtoRoot},
+	} {
+		if f.v != "" {
+			*f.dst = filepath.ToSlash(filepath.Clean(f.v))
+		}
+	}
+	return l
+}
+
 // LoadLayout reads root's LayoutFile, filling what it leaves out from
 // DefaultLayout.
 func LoadLayout(root string) (Layout, error) {

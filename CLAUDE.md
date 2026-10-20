@@ -57,6 +57,16 @@ fast-start version.
 - `web/` — React + Vite source for the UI; **not** built automatically, see
   below
 
+## Workflows
+
+- `ci.yml` — vet, tests, the web build, the image.
+- `check.yml` — the reusable workflow projects call for their drift checks
+  (`uses: JuanVizcaya/fausto/.github/workflows/check.yml@v0`); `selftest.yml`
+  runs it on `testdata/example`. Lint workflows with
+  `docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:1.7.7`.
+- `release.yml` — on a `vX.Y.Z` tag: binaries, the GHCR image, and the
+  floating `vX` tag.
+
 ## Before finishing (mirrors CI in `.github/workflows/ci.yml`)
 
 1. `go vet ./... && go test ./...` (set `FAUSTO_TEST_MONGO_URI` to also run

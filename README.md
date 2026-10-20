@@ -34,15 +34,16 @@ not of the project.
 
 ## `fausto check`
 
-Verifies that the code matches the spec. CI runs it on every pull request:
+Verifies that the code matches the spec:
 
 ```sh
-fausto check          # or: -json, or name checks
+fausto check          # or: -json, -github, or name checks
 ```
 
 Checks: `schema`, `services`, `layers`, `db-ownership`, `contracts`,
-`ownership`, and `runtime`, which enforces the Compose rules (health checks,
-memory limits, hardening, exposure) that `system/requirements.yaml` asks for.
+`ownership`, `runtime`, which enforces the Compose rules (health checks,
+memory limits, hardening, exposure) that `system/requirements.yaml` asks for,
+and `agents`, which keeps the files generated from the charters current.
 
 The checks expect Go commands in `backend/cmd/<name>`, the Compose file at
 `compose.yaml` and protobuf packages under `proto/`. A project laid out
@@ -53,6 +54,35 @@ commands_dir: cmd
 compose_file: deploy/compose.yaml
 proto_root: api/proto
 ```
+
+or passes `-commands-dir`, `-compose-file` and `-proto-root`.
+
+### In a project's CI
+
+A project runs the checks on its pull requests with one workflow file, and
+disconnects from fausto by deleting it:
+
+```yaml
+# .github/workflows/fausto.yml
+name: fausto
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  check:
+    uses: JuanVizcaya/fausto/.github/workflows/check.yml@v0
+    # with:
+    #   checks: schema layers        # default: every check
+    #   working-directory: .         # where system/ is
+    #   version: v0.1.0              # a fausto release; default: the latest
+```
+
+It installs the fausto release, runs `fausto check -github`, which annotates
+each finding on its file in the pull request, and writes a summary on the
+run. CI has no access to fausto's database, so for charters fausto keeps the
+`ownership` and `agents` checks are skipped; `fausto serve` runs them. `@v0`
+follows the latest v0 release; pin a version for repeatable runs.
 
 ## `fausto serve`
 
@@ -343,5 +373,7 @@ The UI source is in `web` (React + Vite); after changing it, run
 ## Releases
 
 Tag `vX.Y.Z` to release: the `release` workflow publishes binaries on the
-GitHub release and the image `ghcr.io/juanvizcaya/fausto:vX.Y.Z` (and
-`:latest`).
+GitHub release and the image `ghcr.io/juanvizcaya/fausto:vX.Y.Z` (and `:vX`,
+`:latest`), and moves the tag `vX` to it, which projects' CI calls the check
+workflow at. The `check workflow` workflow runs that workflow on
+`testdata/example` with fausto built from each commit.

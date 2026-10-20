@@ -1,0 +1,20 @@
+# Runs the reusable check workflow, as projects call it, on the example
+# project, with fausto built from this commit.
+name: check workflow
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  example:
+    uses: ./.github/workflows/check.yml
+    with:
+      version: ${{ github.event.pull_request.head.sha || github.sha }}
+      working-directory: testdata/example
+      # The example project's other checks report the drift it has.
+      checks: schema layers contracts runtime agents

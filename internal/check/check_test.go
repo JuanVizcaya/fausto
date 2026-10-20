@@ -662,3 +662,20 @@ func TestChartersFromFausto(t *testing.T) {
 		}
 	}
 }
+
+func TestGitHubOutput(t *testing.T) {
+	report := &Report{Results: []Result{
+		{Check: "services", Status: Fail, Findings: []Finding{{Component: "api", Path: "compose.yaml", Message: "50% off, a\nb"}}},
+		{Check: "layers", Status: Pass, Findings: []Finding{}},
+	}}
+	var b strings.Builder
+	report.WriteGitHub(&b)
+	if want := "::error title=fausto services,file=compose.yaml::api: 50%25 off, a%0Ab\n"; b.String() != want {
+		t.Errorf("annotations = %q, want %q", b.String(), want)
+	}
+	b.Reset()
+	report.WriteMarkdown(&b)
+	if !strings.Contains(b.String(), "1 of 2 checks found drift") || !strings.Contains(b.String(), "**api** `compose.yaml`") {
+		t.Errorf("summary:\n%s", b.String())
+	}
+}

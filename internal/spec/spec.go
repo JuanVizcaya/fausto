@@ -361,6 +361,9 @@ type Options struct {
 	// Charters, when not nil, are the agent charters (YAML, by agent id)
 	// fausto keeps for the project; they replace any under system/agents/.
 	Charters map[string][]byte
+	// Layout, when not nil, overrides the fields of the project's layout
+	// that it sets.
+	Layout *Layout
 }
 
 // AgentFile is where agent id's charter lives in a project that keeps its
@@ -377,6 +380,9 @@ func LoadWith(root string, o Options) (*Spec, error) {
 	s := &Spec{}
 	var errs []error
 	layout, err := LoadLayout(root)
+	if o.Layout != nil {
+		layout = layout.With(*o.Layout)
+	}
 	s.Layout = layout
 	errs = append(errs, err)
 	single := []struct {

@@ -50,7 +50,7 @@ func main() {
 }
 
 const usage = `usage:
-  fausto check [-root dir] [-json] [check ...]
+  fausto check [-root dir] [-json] [-github] [-commands-dir d] [-compose-file f] [-proto-root d] [check ...]
   fausto agents [-root dir] [-project id]
                                regenerate .claude/agents and .github/CODEOWNERS
                                from the charters (fausto's, or system/agents)
@@ -125,7 +125,12 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	root := rootFlag(fs)
 	project := projectFlag(fs)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
-	if err := fs.Parse(args); err != nil {
+	github := fs.Bool("github", os.Getenv("GITHUB_ACTIONS") == "true", "also annotate findings for GitHub Actions and write the job summary (default: on in GitHub Actions)")
+	var layout spec.Layout
+	fs.StringVar(&layout.CommandsDir, "commands-dir", "", "where Go commands live (default: .fausto.yaml's, or "+spec.DefaultLayout.CommandsDir+")")
+	fs.StringVar(&layout.ComposeFile, "compose-file", "", "the Compose file (default: .fausto.yaml's, or "+spec.DefaultLayout.ComposeFile+")")
+	fs.StringVar(&layout.ProtoRoot, "proto-root", "", "where protobuf packages live (default: .fausto.yaml's, or "+spec.DefaultLayout.ProtoRoot+")")
+	if err := parseInterspersed(fs, args); err != nil {
 		return 2
 	}
 	if err := resolveRoot(root); err != nil {
@@ -134,7 +139,9 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	report, err := check.RunWith(*root, fs.Args(), specOptions(ctx, *root, *project, stderr))
+	opts := specOptions(ctx, *root, *project, stderr)
+	opts.Layout = &layout
+	report, err := check.RunWith(*root, fs.Args(), opts)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -148,6 +155,15 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		printText(stdout, report)
+	}
+	if *github {
+		report.WriteGitHub(stdout)
+		if p := os.Getenv("GITHUB_STEP_SUMMARY"); p != "" {
+			if f, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644); err == nil {
+				report.WriteMarkdown(f)
+				f.Close()
+			}
+		}
 	}
 	if !report.OK {
 		return 1

@@ -1,0 +1,92 @@
+# fausto's drift checks on the calling repository, for its CI. Opt in with
+# one workflow file; delete it to disconnect:
+#
+#   name: fausto
+#   on:
+#     pull_request:
+#     push:
+#       branches: [main]
+#   jobs:
+#     check:
+#       uses: JuanVizcaya/fausto/.github/workflows/check.yml@v0
+#       # with:
+#       #   checks: schema layers         # default: every check
+#       #   working-directory: .          # where system/ is
+#       #   version: v0.2.0               # a fausto release; default: the latest
+#
+# Without fausto's database here, the ownership and agents checks run only
+# for charters kept in the repository.
+name: fausto check
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: A fausto release (vX.Y.Z), "latest", or a branch or commit of fausto to build.
+        type: string
+        default: latest
+      checks:
+        description: Space-separated checks to run; empty runs them all.
+        type: string
+        default: ""
+      working-directory:
+        description: The project's root in the repository, where system/ is.
+        type: string
+        default: "."
+      commands-dir:
+        description: Where the project's Go commands live, if not as in .fausto.yaml or backend/cmd.
+        type: string
+        default: ""
+      compose-file:
+        description: The project's Compose file, if not as in .fausto.yaml or compose.yaml.
+        type: string
+        default: ""
+      proto-root:
+        description: Where the project's protobuf packages live, if not as in .fausto.yaml or proto.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: fausto check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install fausto
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/fausto"
+          mkdir -p "$dir"
+          case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) arch="$(uname -m)" ;; esac
+          if [ "$VERSION" = latest ] || [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            tag=()
+            [ "$VERSION" = latest ] || tag=("$VERSION")
+            gh release download "${tag[@]}" --repo JuanVizcaya/fausto --pattern "fausto_*_linux_${arch}.tar.gz" --dir "$dir"
+            tar -xzf "$dir"/fausto_*_linux_"${arch}".tar.gz -C "$dir" fausto
+          else
+            # A branch or commit of fausto: build it.
+            GOBIN="$dir" GOPROXY=direct GOFLAGS=-mod=mod go install "github.com/JuanVizcaya/fausto/cmd/fausto@${VERSION}"
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+      - name: Check the code against system/
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CHECKS: ${{ inputs.checks }}
+          COMMANDS_DIR: ${{ inputs.commands-dir }}
+          COMPOSE_FILE: ${{ inputs.compose-file }}
+          PROTO_ROOT: ${{ inputs.proto-root }}
+        run: |
+          set -euo pipefail
+          fausto version
+          flags=(-github)
+          [ -z "$COMMANDS_DIR" ] || flags+=(-commands-dir "$COMMANDS_DIR")
+          [ -z "$COMPOSE_FILE" ] || flags+=(-compose-file "$COMPOSE_FILE")
+          [ -z "$PROTO_ROOT" ] || flags+=(-proto-root "$PROTO_ROOT")
+          # shellcheck disable=SC2086 # CHECKS is a list of names
+          fausto check "${flags[@]}" $CHECKS
