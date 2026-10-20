@@ -55,7 +55,7 @@ func RenderCodeOwners(s *spec.Spec) []byte {
 		return lines[i].path < lines[j].path
 	})
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s from the agent charters in %s/agents. Don't edit it:\n", generatedBy, spec.Dir)
+	fmt.Fprintf(&b, "# %s from the agent charters. Don't edit it:\n", generatedBy)
 	b.WriteString("# change a charter's owns or reviewers through a fausto proposal.\n\n")
 	for _, l := range lines {
 		fmt.Fprintf(&b, "/%s %s\n", l.path, l.owners)
