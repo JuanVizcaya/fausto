@@ -37,6 +37,7 @@ export function DecisionsView({ spec, item, go }: ViewProps) {
             </div>
             <p className="muted">
               {selected.date} · <Code>{selected.file}</Code>
+              {spec.source === "fausto" && <span className="muted"> (kept in fausto)</span>}
               {selected.supersedes && (
                 <>
                   {" "}· supersedes <a href={`#/decisions/${selected.supersedes}`}>{selected.supersedes}</a>

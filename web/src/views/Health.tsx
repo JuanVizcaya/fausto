@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ViewProps } from "../App";
+import { fetchRevision, fetchRevisions, restoreRevision } from "../api";
 import { EditButton } from "../editor";
+import type { SpecRevision, SpecRevisionDiff } from "../types";
 import { Code, Empty, Section, StatusPill } from "../ui";
 
-export function HealthView({ spec, report, item }: ViewProps) {
+export function HealthView({ spec, report, item, info, reload }: ViewProps) {
   // A principle's checks link here; bring the selected check into view.
   useEffect(() => {
     if (item) document.getElementById(item)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -29,6 +31,18 @@ export function HealthView({ spec, report, item }: ViewProps) {
                 ? "The code matches the system spec."
                 : `${failed} of ${report.results.length} checks found drift between the code and the spec.`}
             </div>
+            {spec.source === "fausto" && (
+              <p className="muted small">
+                {info?.prChecks ? (
+                  <>
+                    fausto checks the open pull requests of <Code>{info.prChecks}</Code> against the spec, and reports on each as{" "}
+                    <Code>fausto/check</Code>.
+                  </>
+                ) : (
+                  <>Pull requests aren't checked: {info?.prChecksOff ?? "fausto isn't editable here"}.</>
+                )}
+              </p>
+            )}
             <div className="checks">
               {report.results.map((r) => (
                 <article key={r.check} id={r.check} className={item === r.check ? "card selected" : "card"}>
@@ -55,6 +69,8 @@ export function HealthView({ spec, report, item }: ViewProps) {
           </>
         )}
       </Section>
+
+      {spec.source === "fausto" && <SpecHistory current={spec.revision ?? 0} editable={!!info?.editable} reload={reload} />}
 
       <Section title="Implementation principles" aside={<EditButton kind="principle" label="Add principle" />}>
         <p className="lede">
@@ -87,5 +103,97 @@ export function HealthView({ spec, report, item }: ViewProps) {
         </ol>
       </Section>
     </>
+  );
+}
+
+/** The spec fausto keeps, revision by revision: who changed what, with each
+ * revision's diff, and a way back to an earlier one. */
+function SpecHistory({ current, editable, reload }: { current: number; editable: boolean; reload: () => Promise<void> }) {
+  const [revisions, setRevisions] = useState<SpecRevision[] | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
+  const [diff, setDiff] = useState<SpecRevisionDiff | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    fetchRevisions()
+      .then(setRevisions)
+      .catch((e) => setError(e.message));
+  }, [current]);
+  useEffect(() => {
+    setDiff(null);
+    if (open !== null) fetchRevision(open).then(setDiff).catch((e) => setError(e.message));
+  }, [open]);
+  const restore = async (n: number) => {
+    setBusy(true);
+    try {
+      await restoreRevision(n);
+      setOpen(null);
+      await reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section title="Spec history">
+      <p className="lede">
+        fausto keeps this project's spec, as revisions: every applied proposal adds one. Open a revision to see what it changed.
+      </p>
+      {error && <div className="banner bad">{error}</div>}
+      {!revisions ? (
+        <Empty>Loading…</Empty>
+      ) : (
+        <ul className="agent-list revisions">
+          {revisions.map((r) => (
+            <li key={r.n}>
+              <button className={`agent-row${open === r.n ? " active" : ""}`} onClick={() => setOpen(open === r.n ? null : r.n)} aria-expanded={open === r.n}>
+                <span className="agent-main">
+                  <span className="agent-name">
+                    r{r.n} · {r.message}
+                  </span>
+                  <span className="agent-scope">
+                    {r.by.replace(/\s*<[^>]*>\s*$/, "")} · {new Date(r.at).toLocaleString()}
+                    {r.proposal && " · proposal " + r.proposal}
+                  </span>
+                </span>
+                {r.n === current && <StatusPill status="active" />}
+              </button>
+              {open === r.n && (
+                <div className="revision">
+                  {r.proposal && (
+                    <p className="small">
+                      <a href={`#/proposals/${r.proposal}`}>Open the proposal</a>
+                    </p>
+                  )}
+                  {!diff ? (
+                    <Empty>Loading…</Empty>
+                  ) : (
+                    <>
+                      {diff.changes.length > 0 && (
+                        <ul className="changes">
+                          {diff.changes.map((c) => (
+                            <li key={c.kind + c.id}>
+                              <span className={`pill pill-${c.action === "added" ? "good" : c.action === "removed" ? "bad" : "warn"}`}>{c.action}</span> {c.kind}{" "}
+                              <Code>{c.id}</Code>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <pre className="diff mono">{diff.diff || "No changes."}</pre>
+                    </>
+                  )}
+                  {editable && r.n !== current && (
+                    <button className="btn" disabled={busy} onClick={() => restore(r.n)}>
+                      {busy ? "Restoring…" : `Restore revision ${r.n}`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }

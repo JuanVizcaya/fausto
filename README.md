@@ -281,30 +281,49 @@ Changes to the spec go through proposals, kept in the database:
 
 The proposal commit uses git's identity unless you pass `-author "Name <email>"`.
 
-## Agent charters
+## Where the spec lives
 
-An agent charter says what an agent (or a person) is for, which paths it
-owns, the rules it follows and who reviews its work. A project starts with
-its charters in its repository (`system/agents/<id>.yaml`). Fausto can keep
-them instead, so they stop being part of the project:
+A project starts with its spec in its repository, `system/`. Fausto can keep
+it instead, in its database, so the project's repository holds only code:
 
 ```sh
-fausto charters import          # in the project's clone: copy system/agents/ into fausto
-fausto charters list
-fausto charters export          # write fausto's charters back to system/agents/
+fausto spec import              # in the project's clone: system/ becomes revision 1
+fausto spec log                 # the revisions: who, when, which proposal
+fausto spec export -root <dir>  # write the latest (or -revision n) back to system/
 ```
 
-Once fausto keeps them it reads only its own; the files in `system/agents/`
-can be removed from the repository. Charters are still edited through
-proposals, and a charter change is in no commit: it is written to fausto
-when the proposal is applied, right away when nothing else in the proposal
-needs merging. Two proposals waiting for their merge can't change the same
-charter, and a charter changed after a proposal was made makes it stale.
+Once fausto keeps the spec it reads only its own; `system/` can be removed
+from the repository. The spec is still changed through proposals, and a spec
+change is in no commit: applying a proposal re-applies its edits to the
+latest revision and adds the next one, right away when nothing in the
+repository (such as CODEOWNERS) needs merging. Because edits are re-applied,
+proposals that change different items of one file all land; one whose items
+changed since it was made is stale. The Health tab shows the history, each
+revision's diff, and restores an earlier revision as a new one.
 
-Where fausto isn't at hand, as in CI, ownership is unknown: `fausto check`
-skips the `ownership` and `agents` checks and doesn't check that owners are
-charters. With `FAUSTO_MONGO_URI` set, `fausto check` and `fausto agents`
-use the charters fausto keeps.
+Agents read the spec as files: `fausto spec pull`, which `fausto claude` and
+`fausto task pull` run, writes it to `system/` in the agent's work tree,
+which git ignores there. The `fausto_spec` MCP tool reads it too. With
+`FAUSTO_MONGO_URI` set, or in a connected clone, `fausto check` and
+`fausto agents` use the spec fausto keeps.
+
+To leave fausto, `fausto spec export` and commit `system/`.
+
+### Pull request checks
+
+A project's CI can't read fausto's database, so for a spec fausto keeps,
+fausto checks the pull requests itself. While `fausto serve` runs, every
+poll (`-poll`, a minute by default), it checks each open pull request not
+yet checked at the latest spec revision, in its own clone (the project's is
+never touched), and reports a `fausto/check` commit status and one comment
+on the pull request, which it updates. A new revision re-checks every open
+pull request.
+
+It needs the project's GitHub repository (`-github owner/repo` on
+`fausto project add`, or the clone's `origin`) and `FAUSTO_GITHUB_TOKEN`: a
+fine-grained token on that repository with commit statuses and pull requests
+(read and write) and contents (read). For a spec in the repository, use the
+check workflow instead (see [In a project's CI](#in-a-projects-ci)).
 
 ## Running agents
 

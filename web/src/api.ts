@@ -13,6 +13,8 @@ import type {
   JiraOutcome,
   JiraReport,
   SyncReport,
+  SpecRevision,
+  SpecRevisionDiff,
   Task,
 } from "./types";
 
@@ -62,6 +64,11 @@ export const createProposal = (title: string, description: string, milestone: st
 export const fetchProjects = () => get<ProjectInfo[]>("/api/projects");
 /** Accepts a proposal: its change goes to a branch (and a pull request) to be merged. */
 export const approveProposal = (id: string) => request<Proposal>("POST", `/api/proposals/${encodeURIComponent(id)}/approve`);
+/** The history of the spec fausto keeps, newest first. */
+export const fetchRevisions = () => get<SpecRevision[]>("/api/spec/revisions");
+export const fetchRevision = (n: number) => get<SpecRevisionDiff>(`/api/spec/revisions/${n}`);
+/** Makes revision n the current spec again, as a new revision. */
+export const restoreRevision = (n: number) => request<SpecRevision>("POST", `/api/spec/revisions/${n}/restore`);
 /** Checks accepted proposals for a merge; merged ones are applied and get their tasks. */
 export const syncProposals = () => request<SyncReport>("POST", "/api/proposals/sync");
 export const rejectProposal = (id: string) => request<Proposal>("POST", `/api/proposals/${encodeURIComponent(id)}/reject`);

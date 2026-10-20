@@ -16,9 +16,11 @@ which spec changes concern you, and which drift checks to fix.
    writes them to `.fausto/tasks/`, which git ignores; never commit them).
 2. **Start one**: `fausto_task_start` with its id (or `fausto task start <id>`).
 3. **Read before changing**: `CLAUDE.md`, your scope and rules, and the parts
-   of `system/` the task touches: `system.yaml` (components, layers,
+   of the spec the task touches: `system.yaml` (components, layers,
    dependencies), `principles.yaml`, `decisions/`, `requirements.yaml` and
-   `events.yaml`.
+   `events.yaml`. When fausto keeps the spec, it is in `system/` once
+   `fausto spec pull` ran (git ignores it; never commit it), and
+   `fausto_spec` reads any file of it.
 4. **Change only what you own.** If the task needs a change in another
    agent's paths or in `system/`, don't make it; say what you need in your
    summary, so the orchestrator can propose it.

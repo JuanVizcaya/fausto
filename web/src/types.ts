@@ -15,6 +15,9 @@ export interface Spec {
   tasks: Task[];
   /** Where the agent charters are kept: in the repository's system/agents/, or in fausto. */
   charters: "repo" | "fausto" | "";
+  /** Where the spec is kept, and its revision when fausto keeps it. */
+  source: "repo" | "fausto";
+  revision?: number;
 }
 
 export interface System {
@@ -233,6 +236,23 @@ export interface ProjectInfo {
   error?: string;
 }
 
+/** A revision of the spec fausto keeps. */
+export interface SpecRevision {
+  n: number;
+  at: string;
+  by: string;
+  proposal?: string;
+  message: string;
+}
+
+/** What a revision changed, against the one before it. */
+export interface SpecRevisionDiff {
+  n: number;
+  diff: string;
+  files: string[];
+  changes: ItemChange[];
+}
+
 /** What syncing accepted proposals with their reviews did. */
 export interface SyncReport {
   results: { proposal: string; status?: Proposal["status"]; tasks?: string[]; error?: string }[];
@@ -248,6 +268,9 @@ export interface Info {
   readonlyReason?: string;
   /** The repository's GitHub URL, e.g. "https://github.com/owner/repo". */
   repo?: string;
+  /** The GitHub repository whose pull requests fausto checks, or why it doesn't. */
+  prChecks?: string;
+  prChecksOff?: string;
   /** Set when fausto mirrors tasks as Jira issues. */
   jira?: { url: string; project: string };
 }
