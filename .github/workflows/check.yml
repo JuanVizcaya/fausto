@@ -76,8 +76,10 @@ jobs:
             gh release download "${tag[@]}" --repo JuanVizcaya/fausto --pattern "fausto_*_linux_${arch}.tar.gz" --dir "$dir"
             tar -xzf "$dir"/fausto_*_linux_"${arch}".tar.gz -C "$dir" fausto
           else
-            # A branch or commit of fausto: build it.
-            GOBIN="$dir" GOPROXY=direct GOFLAGS=-mod=mod go install "github.com/JuanVizcaya/fausto/cmd/fausto@${VERSION}"
+            # A branch or commit of fausto: build it from a clone.
+            git clone --quiet --filter=blob:none https://github.com/JuanVizcaya/fausto.git "$RUNNER_TEMP/fausto-src"
+            git -C "$RUNNER_TEMP/fausto-src" checkout --quiet "$VERSION"
+            (cd "$RUNNER_TEMP/fausto-src" && go build -trimpath -o "$dir/fausto" ./cmd/fausto)
           fi
           echo "$dir" >> "$GITHUB_PATH"
       - name: Check the code against system/
