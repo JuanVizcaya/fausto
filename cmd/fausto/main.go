@@ -62,7 +62,7 @@ const usage = `usage:
   fausto project add <id> -path <clone> | -github owner/repo [-name name] [-base branch] [-adopt]
   fausto project rename <id> <new-id>
   fausto project rm <id>
-  fausto spec import [-force] | export [-revision n] | log | pull   [-root dir] [-project id]
+  fausto spec import [-force] [-m message] | export [-revision n] | log | pull   [-root dir] [-project id]
                                keep a project's spec in fausto's database, write it
                                back, list its revisions, or write it where an agent works
   fausto token create [-project id] <agent> | list | rm <label>

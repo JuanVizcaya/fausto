@@ -82,6 +82,7 @@ func runSpec(args []string, stdout, stderr io.Writer) int {
 	project := projectFlag(fs)
 	force := fs.Bool("force", false, "import: replace the spec fausto keeps with the repository's, as a new revision")
 	revision := fs.Int("revision", 0, "export: the revision to write (default: the latest)")
+	message := fs.String("m", "", "import: what the new revision changes (default: where it came from)")
 	if err := parseInterspersed(fs, args); err != nil {
 		return 2
 	}
@@ -170,6 +171,9 @@ func runSpec(args []string, stdout, stderr io.Writer) int {
 		msg := "Import from " + *root
 		if latest != nil {
 			n, msg = latest.N+1, "Replace with "+*root+"'s spec"
+		}
+		if *message != "" {
+			msg = *message
 		}
 		r := &store.SpecRevision{N: n, Files: store.SpecFiles(files), By: proposal.Who(*root, os.Getenv("FAUSTO_AUTHOR")), Message: msg}
 		if err := db.AddSpecRevision(ctx, r); err != nil {
