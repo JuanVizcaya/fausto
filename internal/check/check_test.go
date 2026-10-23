@@ -122,12 +122,12 @@ services:
     environment:
       TEST_DATABASE_URL: "postgres://u:p@residents-db:5432/residents_test"
 `,
-		"backend/go.mod":                                  "module example.com/backend\n\ngo 1.27.0\n",
-		"backend/cmd/api/main.go":                         goFile("main", "example.com/backend/internal/api", "example.com/backend/internal/platform/service"),
-		"backend/cmd/residents/main.go":                   goFile("main", "example.com/backend/internal/residents"),
-		"backend/internal/api/api.go":                     goFile("api", "example.com/backend/gen/habbyte/residents/v1", "net/http"),
-		"backend/internal/residents/service.go":           goFile("residents", "example.com/backend/gen/habbyte/residents/v1", "example.com/backend/internal/platform/service"),
-		"backend/internal/platform/service/service.go":    goFile("service", "context"),
+		"backend/go.mod":                                   "module example.com/backend\n\ngo 1.27.0\n",
+		"backend/cmd/api/main.go":                          goFile("main", "example.com/backend/internal/api", "example.com/backend/internal/platform/service"),
+		"backend/cmd/residents/main.go":                    goFile("main", "example.com/backend/internal/residents"),
+		"backend/internal/api/api.go":                      goFile("api", "example.com/backend/gen/habbyte/residents/v1", "net/http"),
+		"backend/internal/residents/service.go":            goFile("residents", "example.com/backend/gen/habbyte/residents/v1", "example.com/backend/internal/platform/service"),
+		"backend/internal/platform/service/service.go":     goFile("service", "context"),
 		"backend/gen/habbyte/residents/v1/residents.pb.go": goFile("residentsv1"),
 		"proto/habbyte/residents/v1/residents.proto":       "syntax = \"proto3\";\n\npackage habbyte.residents.v1;\n",
 	}
