@@ -1,6 +1,6 @@
-# Working on Habyta
+# Working on Habbyte
 
-`system/` is the source of truth for Habyta's architecture. Read it before
+`system/` is the source of truth for Habbyte's architecture. Read it before
 changing code:
 
 - `system/system.yaml`: components, layers, dependencies, and technologies.

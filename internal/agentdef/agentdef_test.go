@@ -11,7 +11,7 @@ import (
 
 func fixture() *spec.Spec {
 	s := &spec.Spec{}
-	s.System.Name = "habyta"
+	s.System.Name = "habbyte"
 	s.System.Components = []spec.Component{
 		{ID: "residents", Name: "Residents service", Kind: "service", Layer: "domain", Status: "active", Owner: "residents", Tech: []string{"go", "grpc"}},
 		{ID: "api", Name: "API gateway", Kind: "gateway", Layer: "edge", Status: "active", Owner: "gateway"},
@@ -29,7 +29,7 @@ func TestRender(t *testing.T) {
 	got := string(Render(s, &s.Agents[0]))
 	for _, want := range []string{
 		"---\nname: residents\n",
-		"description: 'Residents agent for habyta. Residents service: contract and database. Use it to work the fausto tasks assigned to agent `residents`.'",
+		"description: 'Residents agent for habbyte. Residents service: contract and database. Use it to work the fausto tasks assigned to agent `residents`.'",
 		generatedBy + " from system/agents/residents.yaml",
 		"- `backend/internal/residents/`",
 		"- `residents` (Residents service): service in the domain layer, active; go, grpc.",

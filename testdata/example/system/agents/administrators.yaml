@@ -5,8 +5,8 @@ scope: Administrators domain service, its gRPC contract, and its database.
 owns:
   - backend/cmd/administrators/
   - backend/internal/administrators/
-  - backend/gen/habyta/administrators/
-  - proto/habyta/administrators/
+  - backend/gen/habbyte/administrators/
+  - proto/habbyte/administrators/
   - deploy/compose/administrators.yaml
   - deploy/postgres/administrators-init.sql
 rules:

@@ -21,8 +21,8 @@
           "consumers": {"type": "array", "items": {"type": "string"}},
           "message": {
             "type": "string",
-            "pattern": "^habyta(\\.[a-z][a-z0-9_]*)+\\.v[0-9]+\\.[A-Z][A-Za-z0-9]*$",
-            "description": "Fully qualified protobuf message in a versioned package: habyta.residents.events.v1.ResidentRegistered."
+            "pattern": "^habbyte(\\.[a-z][a-z0-9_]*)+\\.v[0-9]+\\.[A-Z][A-Za-z0-9]*$",
+            "description": "Fully qualified protobuf message in a versioned package: habbyte.residents.events.v1.ResidentRegistered."
           },
           "key": {"type": "string", "description": "Field that orders and partitions messages, such as tenant_id."},
           "delivery": {"enum": ["at-least-once", "at-most-once"], "description": "Consumers of at-least-once events must be idempotent."}

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	residentsv1 "github.com/CMOT/habyta/backend/gen/habyta/residents/v1"
+	residentsv1 "github.com/CMOT/habyta/backend/gen/habbyte/residents/v1"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

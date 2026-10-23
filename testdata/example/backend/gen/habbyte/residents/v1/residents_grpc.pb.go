@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: habyta/residents/v1/residents.proto
+// source: habbyte/residents/v1/residents.proto
 
 package residentsv1
 
@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ResidentService_CreateResident_FullMethodName = "/habyta.residents.v1.ResidentService/CreateResident"
-	ResidentService_GetResident_FullMethodName    = "/habyta.residents.v1.ResidentService/GetResident"
-	ResidentService_ListResidents_FullMethodName  = "/habyta.residents.v1.ResidentService/ListResidents"
+	ResidentService_CreateResident_FullMethodName = "/habbyte.residents.v1.ResidentService/CreateResident"
+	ResidentService_GetResident_FullMethodName    = "/habbyte.residents.v1.ResidentService/GetResident"
+	ResidentService_ListResidents_FullMethodName  = "/habbyte.residents.v1.ResidentService/ListResidents"
 )
 
 // ResidentServiceClient is the client API for ResidentService service.
@@ -182,7 +182,7 @@ func _ResidentService_ListResidents_Handler(srv interface{}, ctx context.Context
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ResidentService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "habyta.residents.v1.ResidentService",
+	ServiceName: "habbyte.residents.v1.ResidentService",
 	HandlerType: (*ResidentServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -199,5 +199,5 @@ var ResidentService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "habyta/residents/v1/residents.proto",
+	Metadata: "habbyte/residents/v1/residents.proto",
 }

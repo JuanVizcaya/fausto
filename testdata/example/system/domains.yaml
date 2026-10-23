@@ -20,7 +20,7 @@ domains:
 
 glossary:
   - term: Tenant
-    definition: A management company or complex that uses Habyta. Every record is scoped to one tenant.
+    definition: A management company or complex that uses Habbyte. Every record is scoped to one tenant.
   - term: Unit
     definition: An apartment or other space within a complex.
   - term: Resident

@@ -7,7 +7,7 @@
 //	fausto check [-root dir] [-json] [check ...]
 //	fausto agents [-root dir]
 //	fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
-//	fausto project list|add|rm ...
+//	fausto project list|add|rename|rm ...
 //	fausto spec import|export|log|pull [-root dir] [-project id]
 //	fausto jira sync [-project id] [-dry-run] [task ...]
 //	fausto task list|pull|start|done|drop [-project id] ...
@@ -60,6 +60,7 @@ const usage = `usage:
                                the web UI, for every project (or only -root)
   fausto project list
   fausto project add <id> -path <clone> | -github owner/repo [-name name] [-base branch] [-adopt]
+  fausto project rename <id> <new-id>
   fausto project rm <id>
   fausto spec import [-force] | export [-revision n] | log | pull   [-root dir] [-project id]
                                keep a project's spec in fausto's database, write it

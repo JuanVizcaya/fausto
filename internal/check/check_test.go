@@ -10,7 +10,7 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/spec"
 )
 
-// repoRoot is a snapshot of a real project (Habyta), relative to this package.
+// repoRoot is a snapshot of a real project (Habbyte), relative to this package.
 const repoRoot = "../../testdata/example"
 
 // fixture is a minimal valid repository: a gateway calling one service over
@@ -47,7 +47,7 @@ components:
     paths: [backend/cmd/residents, backend/internal/residents]
     runtime: {cmd: backend/cmd/residents, compose: residents}
     contracts:
-      - {proto: proto/habyta/residents/v1, generated: backend/gen/habyta/residents/v1}
+      - {proto: proto/habbyte/residents/v1, generated: backend/gen/habbyte/residents/v1}
     depends_on:
       - {target: residents-db, protocol: sql}
       - {target: platform, protocol: library}
@@ -86,7 +86,7 @@ id: res
 name: Residents
 kind: agent
 scope: Residents.
-owns: [backend/cmd/residents/, backend/internal/residents/, backend/gen/habyta/residents/, proto/habyta/residents/]
+owns: [backend/cmd/residents/, backend/internal/residents/, backend/gen/habbyte/residents/, proto/habbyte/residents/]
 `,
 		"system/agents/plat.yaml": `
 id: plat
@@ -125,11 +125,11 @@ services:
 		"backend/go.mod":                                  "module example.com/backend\n\ngo 1.27.0\n",
 		"backend/cmd/api/main.go":                         goFile("main", "example.com/backend/internal/api", "example.com/backend/internal/platform/service"),
 		"backend/cmd/residents/main.go":                   goFile("main", "example.com/backend/internal/residents"),
-		"backend/internal/api/api.go":                     goFile("api", "example.com/backend/gen/habyta/residents/v1", "net/http"),
-		"backend/internal/residents/service.go":           goFile("residents", "example.com/backend/gen/habyta/residents/v1", "example.com/backend/internal/platform/service"),
+		"backend/internal/api/api.go":                     goFile("api", "example.com/backend/gen/habbyte/residents/v1", "net/http"),
+		"backend/internal/residents/service.go":           goFile("residents", "example.com/backend/gen/habbyte/residents/v1", "example.com/backend/internal/platform/service"),
 		"backend/internal/platform/service/service.go":    goFile("service", "context"),
-		"backend/gen/habyta/residents/v1/residents.pb.go": goFile("residentsv1"),
-		"proto/habyta/residents/v1/residents.proto":       "syntax = \"proto3\";\n\npackage habyta.residents.v1;\n",
+		"backend/gen/habbyte/residents/v1/residents.pb.go": goFile("residentsv1"),
+		"proto/habbyte/residents/v1/residents.proto":       "syntax = \"proto3\";\n\npackage habbyte.residents.v1;\n",
 	}
 	return files
 }
@@ -310,17 +310,17 @@ func TestViolations(t *testing.T) {
 			name:  "undeclared proto package",
 			check: "contracts",
 			mutate: func(f map[string]string) {
-				f["proto/habyta/billing/v1/billing.proto"] = "syntax = \"proto3\";\npackage habyta.billing.v1;\n"
+				f["proto/habbyte/billing/v1/billing.proto"] = "syntax = \"proto3\";\npackage habbyte.billing.v1;\n"
 			},
-			want: "proto package proto/habyta/billing/v1 is not declared",
+			want: "proto package proto/habbyte/billing/v1 is not declared",
 		},
 		{
 			name:  "proto package does not match directory",
 			check: "contracts",
 			mutate: func(f map[string]string) {
-				f["proto/habyta/residents/v1/residents.proto"] = "syntax = \"proto3\";\npackage habyta.people.v1;\n"
+				f["proto/habbyte/residents/v1/residents.proto"] = "syntax = \"proto3\";\npackage habbyte.people.v1;\n"
 			},
-			want: `does not match its directory (want "habyta.residents.v1")`,
+			want: `does not match its directory (want "habbyte.residents.v1")`,
 		},
 		{
 			name:  "file without owner",
@@ -470,14 +470,14 @@ func TestUnparseableSpecSkipsOtherChecks(t *testing.T) {
 // and an active event; api imports the generated events package.
 func withActiveEvent(f map[string]string, consumers, protoBody string) {
 	f["system/system.yaml"] = strings.Replace(f["system/system.yaml"],
-		"      - {proto: proto/habyta/residents/v1, generated: backend/gen/habyta/residents/v1}\n",
-		"      - {proto: proto/habyta/residents/v1, generated: backend/gen/habyta/residents/v1}\n"+
-			"      - {proto: proto/habyta/residents/events/v1, generated: backend/gen/habyta/residents/events/v1}\n", 1)
-	f["proto/habyta/residents/events/v1/events.proto"] = "syntax = \"proto3\";\npackage habyta.residents.events.v1;\n" + protoBody
-	f["backend/gen/habyta/residents/events/v1/events.pb.go"] = goFile("eventsv1")
-	f["backend/internal/api/events.go"] = goFile("api", "example.com/backend/gen/habyta/residents/events/v1")
+		"      - {proto: proto/habbyte/residents/v1, generated: backend/gen/habbyte/residents/v1}\n",
+		"      - {proto: proto/habbyte/residents/v1, generated: backend/gen/habbyte/residents/v1}\n"+
+			"      - {proto: proto/habbyte/residents/events/v1, generated: backend/gen/habbyte/residents/events/v1}\n", 1)
+	f["proto/habbyte/residents/events/v1/events.proto"] = "syntax = \"proto3\";\npackage habbyte.residents.events.v1;\n" + protoBody
+	f["backend/gen/habbyte/residents/events/v1/events.pb.go"] = goFile("eventsv1")
+	f["backend/internal/api/events.go"] = goFile("api", "example.com/backend/gen/habbyte/residents/events/v1")
 	f["system/events.yaml"] = "events:\n  - id: residents.registered\n    title: T\n    description: D\n    status: active\n" +
-		"    producer: residents\n    message: habyta.residents.events.v1.ResidentRegistered\n" + consumers
+		"    producer: residents\n    message: habbyte.residents.events.v1.ResidentRegistered\n" + consumers
 }
 
 func TestActiveEvent(t *testing.T) {
@@ -503,13 +503,13 @@ func TestEventViolations(t *testing.T) {
 			withActiveEvent(f, "    consumers: [api]\n", "message Other {}\n")
 		}},
 		{"package not a contract", "schema", "is not a contract of \"residents\"", func(f map[string]string) {
-			f["system/events.yaml"] = "events:\n  - {id: residents.x, title: T, description: D, status: active, producer: residents, message: habyta.residents.events.v1.X}\n"
+			f["system/events.yaml"] = "events:\n  - {id: residents.x, title: T, description: D, status: active, producer: residents, message: habbyte.residents.events.v1.X}\n"
 		}},
 		{"library producer", "schema", "only services and gateways publish events", func(f map[string]string) {
-			f["system/events.yaml"] = "events:\n  - {id: platform.x, title: T, description: D, status: planned, producer: platform, message: habyta.platform.v1.X}\n"
+			f["system/events.yaml"] = "events:\n  - {id: platform.x, title: T, description: D, status: planned, producer: platform, message: habbyte.platform.v1.X}\n"
 		}},
 		{"self consumer", "schema", "consumed by its own producer", func(f map[string]string) {
-			f["system/events.yaml"] = "events:\n  - {id: residents.x, title: T, description: D, status: planned, producer: residents, consumers: [residents], message: habyta.residents.events.v1.X}\n"
+			f["system/events.yaml"] = "events:\n  - {id: residents.x, title: T, description: D, status: planned, producer: residents, consumers: [residents], message: habbyte.residents.events.v1.X}\n"
 		}},
 	}
 	for _, tt := range tests {
@@ -578,7 +578,7 @@ func TestComposeInclude(t *testing.T) {
 	files["compose.yaml"] = strings.Replace(files["compose.yaml"], "  residents-db:\n    image: postgres:18\n", "", 1)
 	files["compose.yaml"] = "include:\n  - deploy/compose/residents.yaml\n" + files["compose.yaml"]
 	files["deploy/compose/residents.yaml"] = "services:\n  residents-db:\n    image: postgres:18\n"
-	files["system/agents/res.yaml"] = strings.Replace(files["system/agents/res.yaml"], "proto/habyta/residents/]", "proto/habyta/residents/, deploy/compose/residents.yaml]", 1)
+	files["system/agents/res.yaml"] = strings.Replace(files["system/agents/res.yaml"], "proto/habbyte/residents/]", "proto/habbyte/residents/, deploy/compose/residents.yaml]", 1)
 	report := runFixture(t, files)
 	for _, r := range report.Results {
 		if r.Status != Pass {

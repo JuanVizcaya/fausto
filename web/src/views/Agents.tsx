@@ -79,7 +79,7 @@ export function AgentsView({ spec, report, proposals, item, go, info }: ViewProp
     <div className="split">
       <Section title="Agents and ownership" aside={<EditButton kind="agent" label="Add agent" />}>
         <p className="lede">
-          {count("agent")} AI {count("agent") === 1 ? "agent builds" : "agents build"} Habyta, each in the files it owns;{" "}
+          {count("agent")} AI {count("agent") === 1 ? "agent builds" : "agents build"} {spec.system.name}, each in the files it owns;{" "}
           {count("human")} {count("human") === 1 ? "human reviews and approves" : "humans review and approve"} their work and{" "}
           {count("human") === 1 ? "owns" : "own"} the spec. Every file has exactly one owner: the most specific entry wins.
         </p>

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	administratorsv1 "github.com/CMOT/habyta/backend/gen/habyta/administrators/v1"
+	administratorsv1 "github.com/CMOT/habyta/backend/gen/habbyte/administrators/v1"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

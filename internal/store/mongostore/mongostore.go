@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -229,6 +230,60 @@ func (d *DB) AdoptLegacy(ctx context.Context, id string) ([]string, error) {
 		renamed = append(renamed, c+" → "+target)
 	}
 	return renamed, nil
+}
+
+// RenameProject gives project from the id to: its collections
+// ("<from>.proposals", ...) become to's, and so do its record and its
+// agents' tokens. A display name equal to the old id becomes the new id. It
+// reports which collections it renamed, and renames nothing when to exists.
+func (d *DB) RenameProject(ctx context.Context, from, to string) ([]string, error) {
+	if err := store.ValidProjectID(to); err != nil {
+		return nil, err
+	}
+	p, err := d.Project(ctx, from)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := d.Project(ctx, to); err == nil {
+		return nil, store.ErrExists
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+	names, err := d.db.ListCollectionNames(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range names {
+		if strings.HasPrefix(n, to+".") {
+			return nil, fmt.Errorf("collection %s: %w", n, store.ErrExists)
+		}
+	}
+	var renamed []string
+	for _, n := range names {
+		rest, ok := strings.CutPrefix(n, from+".")
+		if !ok {
+			continue
+		}
+		target := to + "." + rest
+		cmd := bson.D{{Key: "renameCollection", Value: d.db.Name() + "." + n}, {Key: "to", Value: d.db.Name() + "." + target}}
+		if err := d.client.Database("admin").RunCommand(ctx, cmd).Err(); err != nil {
+			return renamed, fmt.Errorf("rename %s to %s: %w", n, target, err)
+		}
+		renamed = append(renamed, n+" → "+target)
+	}
+	d.indexed.Delete(from)
+	p.ID = to
+	if p.Name == from {
+		p.Name = to
+	}
+	if err := d.PutProject(ctx, p); err != nil {
+		return renamed, err
+	}
+	if _, err := d.projects.DeleteOne(ctx, bson.D{{Key: "_id", Value: from}}); err != nil {
+		return renamed, err
+	}
+	_, err = d.tokens.UpdateMany(ctx, bson.D{{Key: "project", Value: from}}, bson.D{{Key: "$set", Value: bson.D{{Key: "project", Value: to}}}})
+	return renamed, err
 }
 
 // Close does nothing: the connection belongs to the DB.

@@ -8,6 +8,6 @@ events:
     description: A resident was linked to a unit. Billing uses it to start charging the unit's fees; maintenance uses it to know who may report problems.
     status: planned
     producer: residents
-    message: habyta.residents.events.v1.ResidentRegistered
+    message: habbyte.residents.events.v1.ResidentRegistered
     key: tenant_id
     delivery: at-least-once

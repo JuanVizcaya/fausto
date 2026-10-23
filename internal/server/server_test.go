@@ -12,7 +12,7 @@ import (
 	"github.com/JuanVizcaya/fausto/internal/source"
 )
 
-// repoRoot is a snapshot of a real project (Habyta), relative to this package.
+// repoRoot is a snapshot of a real project (Habbyte), relative to this package.
 const repoRoot = "../../testdata/example"
 
 func get(t *testing.T, path string) (*http.Response, []byte) {

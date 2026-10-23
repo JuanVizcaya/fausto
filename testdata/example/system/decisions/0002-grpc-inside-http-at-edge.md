@@ -13,7 +13,7 @@ typed, versioned contracts.
 
 ## Decision
 
-Domain services expose only gRPC, defined in `proto/habyta/<domain>/v1`. The
+Domain services expose only gRPC, defined in `proto/habbyte/<domain>/v1`. The
 `api` gateway is the only public entry point. It serves HTTP/JSON with
 hand-written types and calls domain services over gRPC.
 

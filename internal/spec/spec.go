@@ -227,14 +227,14 @@ type Event struct {
 	Producer    string   `json:"producer"`
 	Consumers   []string `json:"consumers,omitempty"`
 	// Message is the fully qualified protobuf message, such as
-	// habyta.residents.events.v1.ResidentRegistered.
+	// habbyte.residents.events.v1.ResidentRegistered.
 	Message  string `json:"message"`
 	Key      string `json:"key,omitempty"`
 	Delivery string `json:"delivery,omitempty"`
 }
 
 // ProtoDir returns the directory of the event's protobuf package under
-// protoRoot and the message name: proto/habyta/residents/events/v1 and
+// protoRoot and the message name: proto/habbyte/residents/events/v1 and
 // ResidentRegistered.
 func (e *Event) ProtoDir(protoRoot string) (dir, message string) {
 	i := strings.LastIndex(e.Message, ".")

@@ -219,6 +219,32 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 
+	case "rename":
+		if fs.NArg() != 2 {
+			fmt.Fprintln(stderr, "usage: fausto project rename <id> <new-id>")
+			return 2
+		}
+		from, to := fs.Arg(0), fs.Arg(1)
+		renamed, err := db.RenameProject(ctx, from, to)
+		for _, r := range renamed {
+			fmt.Fprintln(stdout, "moved", r)
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		// fausto's own clones, when it keeps any for the project.
+		for _, suffix := range []string{"", "-prs.git"} {
+			old := filepath.Join(dataDir(), "repos", from+suffix)
+			if _, err := os.Stat(old); err == nil {
+				if err := os.Rename(old, filepath.Join(dataDir(), "repos", to+suffix)); err != nil {
+					fmt.Fprintln(stderr, err)
+				}
+			}
+		}
+		fmt.Fprintf(stdout, "Renamed %s to %s; restart fausto serve to pick it up.\n", from, to)
+		return 0
+
 	case "rm":
 		if fs.NArg() != 1 {
 			fmt.Fprintln(stderr, "usage: fausto project rm <id>")
@@ -236,7 +262,7 @@ func runProject(args []string, stdout, stderr io.Writer) int {
 }
 
 // parseInterspersed parses flags wherever they are among the arguments, so
-// `fausto project add habyta -path ../habyta` works as well as with the
+// `fausto project add habbyte -path ../habbyte` works as well as with the
 // flags first.
 func parseInterspersed(fs *flag.FlagSet, args []string) error {
 	var positional []string

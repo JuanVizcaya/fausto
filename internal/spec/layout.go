@@ -24,7 +24,7 @@ type Layout struct {
 	// files it includes are read too.
 	ComposeFile string `yaml:"compose_file,omitempty" json:"composeFile"`
 	// ProtoRoot is where protobuf packages live, one directory per package
-	// segment (habyta.residents.v1 in <proto_root>/habyta/residents/v1).
+	// segment (habbyte.residents.v1 in <proto_root>/habbyte/residents/v1).
 	ProtoRoot string `yaml:"proto_root,omitempty" json:"protoRoot"`
 }
 

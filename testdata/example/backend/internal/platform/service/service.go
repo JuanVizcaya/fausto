@@ -1,4 +1,4 @@
-// Package service is the shared process entry point for Habyta services:
+// Package service is the shared process entry point for Habbyte services:
 // configuration, logging, signal handling, listeners, and the container
 // healthcheck subcommand.
 package service

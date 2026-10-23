@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: habyta/administrators/v1/administrators.proto
+// source: habbyte/administrators/v1/administrators.proto
 
 package administratorsv1
 
@@ -41,7 +41,7 @@ type Administrator struct {
 
 func (x *Administrator) Reset() {
 	*x = Administrator{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[0]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -53,7 +53,7 @@ func (x *Administrator) String() string {
 func (*Administrator) ProtoMessage() {}
 
 func (x *Administrator) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[0]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -66,7 +66,7 @@ func (x *Administrator) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Administrator.ProtoReflect.Descriptor instead.
 func (*Administrator) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{0}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Administrator) GetId() string {
@@ -138,7 +138,7 @@ type CreateAdministratorRequest struct {
 
 func (x *CreateAdministratorRequest) Reset() {
 	*x = CreateAdministratorRequest{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[1]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -150,7 +150,7 @@ func (x *CreateAdministratorRequest) String() string {
 func (*CreateAdministratorRequest) ProtoMessage() {}
 
 func (x *CreateAdministratorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[1]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,7 +163,7 @@ func (x *CreateAdministratorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAdministratorRequest.ProtoReflect.Descriptor instead.
 func (*CreateAdministratorRequest) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{1}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateAdministratorRequest) GetTenantId() string {
@@ -210,7 +210,7 @@ type CreateAdministratorResponse struct {
 
 func (x *CreateAdministratorResponse) Reset() {
 	*x = CreateAdministratorResponse{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[2]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +222,7 @@ func (x *CreateAdministratorResponse) String() string {
 func (*CreateAdministratorResponse) ProtoMessage() {}
 
 func (x *CreateAdministratorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[2]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +235,7 @@ func (x *CreateAdministratorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateAdministratorResponse.ProtoReflect.Descriptor instead.
 func (*CreateAdministratorResponse) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{2}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateAdministratorResponse) GetAdministrator() *Administrator {
@@ -255,7 +255,7 @@ type GetAdministratorRequest struct {
 
 func (x *GetAdministratorRequest) Reset() {
 	*x = GetAdministratorRequest{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[3]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +267,7 @@ func (x *GetAdministratorRequest) String() string {
 func (*GetAdministratorRequest) ProtoMessage() {}
 
 func (x *GetAdministratorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[3]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +280,7 @@ func (x *GetAdministratorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAdministratorRequest.ProtoReflect.Descriptor instead.
 func (*GetAdministratorRequest) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{3}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetAdministratorRequest) GetTenantId() string {
@@ -306,7 +306,7 @@ type GetAdministratorResponse struct {
 
 func (x *GetAdministratorResponse) Reset() {
 	*x = GetAdministratorResponse{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[4]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -318,7 +318,7 @@ func (x *GetAdministratorResponse) String() string {
 func (*GetAdministratorResponse) ProtoMessage() {}
 
 func (x *GetAdministratorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[4]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -331,7 +331,7 @@ func (x *GetAdministratorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAdministratorResponse.ProtoReflect.Descriptor instead.
 func (*GetAdministratorResponse) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{4}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetAdministratorResponse) GetAdministrator() *Administrator {
@@ -353,7 +353,7 @@ type ListAdministratorsRequest struct {
 
 func (x *ListAdministratorsRequest) Reset() {
 	*x = ListAdministratorsRequest{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[5]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -365,7 +365,7 @@ func (x *ListAdministratorsRequest) String() string {
 func (*ListAdministratorsRequest) ProtoMessage() {}
 
 func (x *ListAdministratorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[5]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -378,7 +378,7 @@ func (x *ListAdministratorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAdministratorsRequest.ProtoReflect.Descriptor instead.
 func (*ListAdministratorsRequest) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{5}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListAdministratorsRequest) GetTenantId() string {
@@ -413,7 +413,7 @@ type ListAdministratorsResponse struct {
 
 func (x *ListAdministratorsResponse) Reset() {
 	*x = ListAdministratorsResponse{}
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[6]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -425,7 +425,7 @@ func (x *ListAdministratorsResponse) String() string {
 func (*ListAdministratorsResponse) ProtoMessage() {}
 
 func (x *ListAdministratorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_administrators_v1_administrators_proto_msgTypes[6]
+	mi := &file_habbyte_administrators_v1_administrators_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -438,7 +438,7 @@ func (x *ListAdministratorsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAdministratorsResponse.ProtoReflect.Descriptor instead.
 func (*ListAdministratorsResponse) Descriptor() ([]byte, []int) {
-	return file_habyta_administrators_v1_administrators_proto_rawDescGZIP(), []int{6}
+	return file_habbyte_administrators_v1_administrators_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListAdministratorsResponse) GetAdministrators() []*Administrator {
@@ -455,11 +455,11 @@ func (x *ListAdministratorsResponse) GetNextPageToken() string {
 	return ""
 }
 
-var File_habyta_administrators_v1_administrators_proto protoreflect.FileDescriptor
+var File_habbyte_administrators_v1_administrators_proto protoreflect.FileDescriptor
 
-const file_habyta_administrators_v1_administrators_proto_rawDesc = "" +
+const file_habbyte_administrators_v1_administrators_proto_rawDesc = "" +
 	"\n" +
-	"-habyta/administrators/v1/administrators.proto\x12\x18habyta.administrators.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9f\x02\n" +
+	".habbyte/administrators/v1/administrators.proto\x12\x19habbyte.administrators.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9f\x02\n" +
 	"\rAdministrator\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x18\n" +
@@ -476,63 +476,63 @@ const file_habyta_administrators_v1_administrators_proto_rawDesc = "" +
 	"\acompany\x18\x02 \x01(\tR\acompany\x12\x14\n" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x12\x14\n" +
 	"\x05phone\x18\x04 \x01(\tR\x05phone\x12!\n" +
-	"\fkeycloak_sub\x18\x05 \x01(\tR\vkeycloakSub\"l\n" +
-	"\x1bCreateAdministratorResponse\x12M\n" +
-	"\radministrator\x18\x01 \x01(\v2'.habyta.administrators.v1.AdministratorR\radministrator\"F\n" +
+	"\fkeycloak_sub\x18\x05 \x01(\tR\vkeycloakSub\"m\n" +
+	"\x1bCreateAdministratorResponse\x12N\n" +
+	"\radministrator\x18\x01 \x01(\v2(.habbyte.administrators.v1.AdministratorR\radministrator\"F\n" +
 	"\x17GetAdministratorRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"i\n" +
-	"\x18GetAdministratorResponse\x12M\n" +
-	"\radministrator\x18\x01 \x01(\v2'.habyta.administrators.v1.AdministratorR\radministrator\"t\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"j\n" +
+	"\x18GetAdministratorResponse\x12N\n" +
+	"\radministrator\x18\x01 \x01(\v2(.habbyte.administrators.v1.AdministratorR\radministrator\"t\n" +
 	"\x19ListAdministratorsRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\x95\x01\n" +
-	"\x1aListAdministratorsResponse\x12O\n" +
-	"\x0eadministrators\x18\x01 \x03(\v2'.habyta.administrators.v1.AdministratorR\x0eadministrators\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\x97\x03\n" +
-	"\x14AdministratorService\x12\x82\x01\n" +
-	"\x13CreateAdministrator\x124.habyta.administrators.v1.CreateAdministratorRequest\x1a5.habyta.administrators.v1.CreateAdministratorResponse\x12y\n" +
-	"\x10GetAdministrator\x121.habyta.administrators.v1.GetAdministratorRequest\x1a2.habyta.administrators.v1.GetAdministratorResponse\x12\x7f\n" +
-	"\x12ListAdministrators\x123.habyta.administrators.v1.ListAdministratorsRequest\x1a4.habyta.administrators.v1.ListAdministratorsResponseB\x83\x02\n" +
-	"\x1ccom.habyta.administrators.v1B\x13AdministratorsProtoP\x01ZLgithub.com/CMOT/habyta/backend/gen/habyta/administrators/v1;administratorsv1\xa2\x02\x03HAX\xaa\x02\x18Habyta.Administrators.V1\xca\x02\x18Habyta\\Administrators\\V1\xe2\x02$Habyta\\Administrators\\V1\\GPBMetadata\xea\x02\x1aHabyta::Administrators::V1b\x06proto3"
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x96\x01\n" +
+	"\x1aListAdministratorsResponse\x12P\n" +
+	"\x0eadministrators\x18\x01 \x03(\v2(.habbyte.administrators.v1.AdministratorR\x0eadministrators\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\x9e\x03\n" +
+	"\x14AdministratorService\x12\x84\x01\n" +
+	"\x13CreateAdministrator\x125.habbyte.administrators.v1.CreateAdministratorRequest\x1a6.habbyte.administrators.v1.CreateAdministratorResponse\x12{\n" +
+	"\x10GetAdministrator\x122.habbyte.administrators.v1.GetAdministratorRequest\x1a3.habbyte.administrators.v1.GetAdministratorResponse\x12\x81\x01\n" +
+	"\x12ListAdministrators\x124.habbyte.administrators.v1.ListAdministratorsRequest\x1a5.habbyte.administrators.v1.ListAdministratorsResponseB\x89\x02\n" +
+	"\x1dcom.habbyte.administrators.v1B\x13AdministratorsProtoP\x01ZMgithub.com/CMOT/habyta/backend/gen/habbyte/administrators/v1;administratorsv1\xa2\x02\x03HAX\xaa\x02\x19Habbyte.Administrators.V1\xca\x02\x19Habbyte\\Administrators\\V1\xe2\x02%Habbyte\\Administrators\\V1\\GPBMetadata\xea\x02\x1bHabbyte::Administrators::V1b\x06proto3"
 
 var (
-	file_habyta_administrators_v1_administrators_proto_rawDescOnce sync.Once
-	file_habyta_administrators_v1_administrators_proto_rawDescData []byte
+	file_habbyte_administrators_v1_administrators_proto_rawDescOnce sync.Once
+	file_habbyte_administrators_v1_administrators_proto_rawDescData []byte
 )
 
-func file_habyta_administrators_v1_administrators_proto_rawDescGZIP() []byte {
-	file_habyta_administrators_v1_administrators_proto_rawDescOnce.Do(func() {
-		file_habyta_administrators_v1_administrators_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_habyta_administrators_v1_administrators_proto_rawDesc), len(file_habyta_administrators_v1_administrators_proto_rawDesc)))
+func file_habbyte_administrators_v1_administrators_proto_rawDescGZIP() []byte {
+	file_habbyte_administrators_v1_administrators_proto_rawDescOnce.Do(func() {
+		file_habbyte_administrators_v1_administrators_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_habbyte_administrators_v1_administrators_proto_rawDesc), len(file_habbyte_administrators_v1_administrators_proto_rawDesc)))
 	})
-	return file_habyta_administrators_v1_administrators_proto_rawDescData
+	return file_habbyte_administrators_v1_administrators_proto_rawDescData
 }
 
-var file_habyta_administrators_v1_administrators_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_habyta_administrators_v1_administrators_proto_goTypes = []any{
-	(*Administrator)(nil),               // 0: habyta.administrators.v1.Administrator
-	(*CreateAdministratorRequest)(nil),  // 1: habyta.administrators.v1.CreateAdministratorRequest
-	(*CreateAdministratorResponse)(nil), // 2: habyta.administrators.v1.CreateAdministratorResponse
-	(*GetAdministratorRequest)(nil),     // 3: habyta.administrators.v1.GetAdministratorRequest
-	(*GetAdministratorResponse)(nil),    // 4: habyta.administrators.v1.GetAdministratorResponse
-	(*ListAdministratorsRequest)(nil),   // 5: habyta.administrators.v1.ListAdministratorsRequest
-	(*ListAdministratorsResponse)(nil),  // 6: habyta.administrators.v1.ListAdministratorsResponse
+var file_habbyte_administrators_v1_administrators_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_habbyte_administrators_v1_administrators_proto_goTypes = []any{
+	(*Administrator)(nil),               // 0: habbyte.administrators.v1.Administrator
+	(*CreateAdministratorRequest)(nil),  // 1: habbyte.administrators.v1.CreateAdministratorRequest
+	(*CreateAdministratorResponse)(nil), // 2: habbyte.administrators.v1.CreateAdministratorResponse
+	(*GetAdministratorRequest)(nil),     // 3: habbyte.administrators.v1.GetAdministratorRequest
+	(*GetAdministratorResponse)(nil),    // 4: habbyte.administrators.v1.GetAdministratorResponse
+	(*ListAdministratorsRequest)(nil),   // 5: habbyte.administrators.v1.ListAdministratorsRequest
+	(*ListAdministratorsResponse)(nil),  // 6: habbyte.administrators.v1.ListAdministratorsResponse
 	(*timestamppb.Timestamp)(nil),       // 7: google.protobuf.Timestamp
 }
-var file_habyta_administrators_v1_administrators_proto_depIdxs = []int32{
-	7, // 0: habyta.administrators.v1.Administrator.create_time:type_name -> google.protobuf.Timestamp
-	7, // 1: habyta.administrators.v1.Administrator.update_time:type_name -> google.protobuf.Timestamp
-	0, // 2: habyta.administrators.v1.CreateAdministratorResponse.administrator:type_name -> habyta.administrators.v1.Administrator
-	0, // 3: habyta.administrators.v1.GetAdministratorResponse.administrator:type_name -> habyta.administrators.v1.Administrator
-	0, // 4: habyta.administrators.v1.ListAdministratorsResponse.administrators:type_name -> habyta.administrators.v1.Administrator
-	1, // 5: habyta.administrators.v1.AdministratorService.CreateAdministrator:input_type -> habyta.administrators.v1.CreateAdministratorRequest
-	3, // 6: habyta.administrators.v1.AdministratorService.GetAdministrator:input_type -> habyta.administrators.v1.GetAdministratorRequest
-	5, // 7: habyta.administrators.v1.AdministratorService.ListAdministrators:input_type -> habyta.administrators.v1.ListAdministratorsRequest
-	2, // 8: habyta.administrators.v1.AdministratorService.CreateAdministrator:output_type -> habyta.administrators.v1.CreateAdministratorResponse
-	4, // 9: habyta.administrators.v1.AdministratorService.GetAdministrator:output_type -> habyta.administrators.v1.GetAdministratorResponse
-	6, // 10: habyta.administrators.v1.AdministratorService.ListAdministrators:output_type -> habyta.administrators.v1.ListAdministratorsResponse
+var file_habbyte_administrators_v1_administrators_proto_depIdxs = []int32{
+	7, // 0: habbyte.administrators.v1.Administrator.create_time:type_name -> google.protobuf.Timestamp
+	7, // 1: habbyte.administrators.v1.Administrator.update_time:type_name -> google.protobuf.Timestamp
+	0, // 2: habbyte.administrators.v1.CreateAdministratorResponse.administrator:type_name -> habbyte.administrators.v1.Administrator
+	0, // 3: habbyte.administrators.v1.GetAdministratorResponse.administrator:type_name -> habbyte.administrators.v1.Administrator
+	0, // 4: habbyte.administrators.v1.ListAdministratorsResponse.administrators:type_name -> habbyte.administrators.v1.Administrator
+	1, // 5: habbyte.administrators.v1.AdministratorService.CreateAdministrator:input_type -> habbyte.administrators.v1.CreateAdministratorRequest
+	3, // 6: habbyte.administrators.v1.AdministratorService.GetAdministrator:input_type -> habbyte.administrators.v1.GetAdministratorRequest
+	5, // 7: habbyte.administrators.v1.AdministratorService.ListAdministrators:input_type -> habbyte.administrators.v1.ListAdministratorsRequest
+	2, // 8: habbyte.administrators.v1.AdministratorService.CreateAdministrator:output_type -> habbyte.administrators.v1.CreateAdministratorResponse
+	4, // 9: habbyte.administrators.v1.AdministratorService.GetAdministrator:output_type -> habbyte.administrators.v1.GetAdministratorResponse
+	6, // 10: habbyte.administrators.v1.AdministratorService.ListAdministrators:output_type -> habbyte.administrators.v1.ListAdministratorsResponse
 	8, // [8:11] is the sub-list for method output_type
 	5, // [5:8] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -540,26 +540,26 @@ var file_habyta_administrators_v1_administrators_proto_depIdxs = []int32{
 	0, // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_habyta_administrators_v1_administrators_proto_init() }
-func file_habyta_administrators_v1_administrators_proto_init() {
-	if File_habyta_administrators_v1_administrators_proto != nil {
+func init() { file_habbyte_administrators_v1_administrators_proto_init() }
+func file_habbyte_administrators_v1_administrators_proto_init() {
+	if File_habbyte_administrators_v1_administrators_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_habyta_administrators_v1_administrators_proto_rawDesc), len(file_habyta_administrators_v1_administrators_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_habbyte_administrators_v1_administrators_proto_rawDesc), len(file_habbyte_administrators_v1_administrators_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_habyta_administrators_v1_administrators_proto_goTypes,
-		DependencyIndexes: file_habyta_administrators_v1_administrators_proto_depIdxs,
-		MessageInfos:      file_habyta_administrators_v1_administrators_proto_msgTypes,
+		GoTypes:           file_habbyte_administrators_v1_administrators_proto_goTypes,
+		DependencyIndexes: file_habbyte_administrators_v1_administrators_proto_depIdxs,
+		MessageInfos:      file_habbyte_administrators_v1_administrators_proto_msgTypes,
 	}.Build()
-	File_habyta_administrators_v1_administrators_proto = out.File
-	file_habyta_administrators_v1_administrators_proto_goTypes = nil
-	file_habyta_administrators_v1_administrators_proto_depIdxs = nil
+	File_habbyte_administrators_v1_administrators_proto = out.File
+	file_habbyte_administrators_v1_administrators_proto_goTypes = nil
+	file_habbyte_administrators_v1_administrators_proto_depIdxs = nil
 }

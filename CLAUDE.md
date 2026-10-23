@@ -2,7 +2,7 @@
 
 Fausto drift-checks a project's `system/` spec against its code and serves
 a web UI for proposing changes to the spec. It is its own project: it works
-on a target project (first Habyta) only through that project's repository.
+on a target project (first Habbyte) only through that project's repository.
 See `README.md` for the full picture (what each subcommand does, the
 proposal workflow, running agents, the web UI build). This file is just the
 fast-start version.
@@ -10,11 +10,11 @@ fast-start version.
 ## Quick commands (run from this repository's root)
 
 - `go vet ./... && go test ./...` — sanity check
-- `go run ./cmd/fausto check -root ../habyta` (add `-json`, or a check name
+- `go run ./cmd/fausto check -root ../habbyte` (add `-json`, or a check name
   to run just one); without `-root`, against a project, it finds the nearest
   parent with `system/system.yaml`
 - `docker compose -f compose.yaml -f compose.dev.yaml up -d mongo`, then
-  `go run ./cmd/fausto serve -root ../habyta` — web UI at `127.0.0.1:7070`
+  `go run ./cmd/fausto serve -root ../habbyte` — web UI at `127.0.0.1:7070`
 - `go run ./cmd/fausto agents -root <project>` — regenerate the project's
   `.claude/agents/*.md` and `.github/CODEOWNERS` from its
   `system/agents/*.yaml` charters

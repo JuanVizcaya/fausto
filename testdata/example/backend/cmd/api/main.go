@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	residentsv1 "github.com/CMOT/habyta/backend/gen/habyta/residents/v1"
+	residentsv1 "github.com/CMOT/habyta/backend/gen/habbyte/residents/v1"
 	"github.com/CMOT/habyta/backend/internal/api"
 	"github.com/CMOT/habyta/backend/internal/platform/grpcclient"
 	"github.com/CMOT/habyta/backend/internal/platform/server"

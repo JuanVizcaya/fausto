@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	residentsv1 "github.com/CMOT/habyta/backend/gen/habyta/residents/v1"
+	residentsv1 "github.com/CMOT/habyta/backend/gen/habbyte/residents/v1"
 	"github.com/CMOT/habyta/backend/internal/platform/requestid"
 	"github.com/CMOT/habyta/backend/internal/platform/server"
 

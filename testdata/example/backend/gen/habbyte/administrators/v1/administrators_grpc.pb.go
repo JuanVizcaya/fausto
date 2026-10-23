@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.2
 // - protoc             (unknown)
-// source: habyta/administrators/v1/administrators.proto
+// source: habbyte/administrators/v1/administrators.proto
 
 package administratorsv1
 
@@ -19,9 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AdministratorService_CreateAdministrator_FullMethodName = "/habyta.administrators.v1.AdministratorService/CreateAdministrator"
-	AdministratorService_GetAdministrator_FullMethodName    = "/habyta.administrators.v1.AdministratorService/GetAdministrator"
-	AdministratorService_ListAdministrators_FullMethodName  = "/habyta.administrators.v1.AdministratorService/ListAdministrators"
+	AdministratorService_CreateAdministrator_FullMethodName = "/habbyte.administrators.v1.AdministratorService/CreateAdministrator"
+	AdministratorService_GetAdministrator_FullMethodName    = "/habbyte.administrators.v1.AdministratorService/GetAdministrator"
+	AdministratorService_ListAdministrators_FullMethodName  = "/habbyte.administrators.v1.AdministratorService/ListAdministrators"
 )
 
 // AdministratorServiceClient is the client API for AdministratorService service.
@@ -184,7 +184,7 @@ func _AdministratorService_ListAdministrators_Handler(srv interface{}, ctx conte
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var AdministratorService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "habyta.administrators.v1.AdministratorService",
+	ServiceName: "habbyte.administrators.v1.AdministratorService",
 	HandlerType: (*AdministratorServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -201,5 +201,5 @@ var AdministratorService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "habyta/administrators/v1/administrators.proto",
+	Metadata: "habbyte/administrators/v1/administrators.proto",
 }

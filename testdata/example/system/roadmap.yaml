@@ -32,7 +32,7 @@ milestones:
     goal: Complexes, buildings, and units are managed by a properties service that other services can rely on.
     status: planned
     exit_criteria:
-      - text: Properties service declared in system/ with contract proto/habyta/properties/v1
+      - text: Properties service declared in system/ with contract proto/habbyte/properties/v1
       - text: Complexes, buildings, and units can be created and listed per tenant
       - text: Public HTTP endpoints for properties in the gateway
       - text: Residents validate unit ids against the properties service
@@ -44,7 +44,7 @@ milestones:
     depends_on: [properties-mvp, residents-mvp]
     components: [api]
     exit_criteria:
-      - text: Billing service declared in system/ with contract proto/habyta/billing/v1
+      - text: Billing service declared in system/ with contract proto/habbyte/billing/v1
       - text: Monthly fees per unit generate invoices for its residents
       - text: Public HTTP endpoints for invoices in the gateway
 
@@ -54,7 +54,7 @@ milestones:
     status: planned
     depends_on: [properties-mvp]
     exit_criteria:
-      - text: Maintenance service declared in system/ with contract proto/habyta/maintenance/v1
+      - text: Maintenance service declared in system/ with contract proto/habbyte/maintenance/v1
       - text: Requests move through open, in progress, and resolved
 
   - id: web-app-v1

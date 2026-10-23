@@ -1,4 +1,4 @@
-# Habyta
+# Habbyte
 
 Apartment complex management. Go backend, with a React frontend planned.
 
@@ -16,7 +16,7 @@ to run it, and `CLAUDE.md` for how agents work with the spec.
 
 ## Naming and layout
 
-- Repository/project: `habyta`.
+- Repository/project: `habbyte`.
 - Go module: `github.com/CMOT/habyta/backend`.
 - Services: `api` (HTTP/JSON gateway for React), and the `residents` and
   `administrators` domain services (gRPC).
@@ -29,7 +29,7 @@ tasks/                           # Agent tasks created by accepted proposals
 fausto/                          # Supervising tool: `fausto check` drift checks
 compose.yaml
 buf.yaml, buf.gen.yaml           # Protobuf lint/breaking rules and code generation
-proto/habyta/<domain>/v1/        # Versioned gRPC contracts
+proto/habbyte/<domain>/v1/        # Versioned gRPC contracts
 backend/
   Dockerfile                     # Builds any service: --build-arg SERVICE=<name>
   cmd/<service>/                 # Entry points: service.Main(name, register)
@@ -106,8 +106,8 @@ meaning of an existing field number; add a new `v2` package for breaking changes
 
 Events follow the same rules. Declare each event in `system/events.yaml` with
 its producer, consumers, and message, such as
-`habyta.residents.events.v1.ResidentRegistered`. Before an event goes active,
-add its package (`proto/habyta/residents/events/v1`) to the producer's
+`habbyte.residents.events.v1.ResidentRegistered`. Before an event goes active,
+add its package (`proto/habbyte/residents/events/v1`) to the producer's
 `contracts` in `system/system.yaml`; consumers may import the generated code
 only for events they consume.
 
@@ -151,7 +151,7 @@ the Postgres integration tests, each service against its own test database
 (`residents_test`, `administrators_test`):
 
 ```sh
-docker build --target test -t habyta-test ./backend
+docker build --target test -t habbyte-test ./backend
 docker compose --profile test run --rm --build test                   # residents
 docker compose --profile test run --rm --build administrators-test    # administrators
 ```

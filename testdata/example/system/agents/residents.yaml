@@ -5,8 +5,8 @@ scope: Residents domain service, its gRPC contract, and its database.
 owns:
   - backend/cmd/residents/
   - backend/internal/residents/
-  - backend/gen/habyta/residents/
-  - proto/habyta/residents/
+  - backend/gen/habbyte/residents/
+  - proto/habbyte/residents/
   - deploy/postgres/residents-init.sql
 rules:
   - Add schema changes as new numbered migrations; never edit an applied one.

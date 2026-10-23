@@ -9,8 +9,8 @@
 # under FAUSTO_PROJECTS_DIR, by the same path as on your machine (it is
 # mounted at that path), or a GitHub repository (with FAUSTO_GITHUB_TOKEN):
 #
-#   docker compose exec fausto fausto project add habyta -path "$HOME/src/habyta"
-#   docker compose exec fausto fausto project add habyta -github owner/habyta
+#   docker compose exec fausto fausto project add habbyte -path "$HOME/src/habbyte"
+#   docker compose exec fausto fausto project add habbyte -github owner/habbyte
 #   docker compose restart fausto
 #
 # compose.dev.yaml also publishes the database on localhost, for the fausto

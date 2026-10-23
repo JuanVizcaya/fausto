@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: habyta/residents/v1/residents.proto
+// source: habbyte/residents/v1/residents.proto
 
 package residentsv1
 
@@ -40,7 +40,7 @@ type Resident struct {
 
 func (x *Resident) Reset() {
 	*x = Resident{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[0]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -52,7 +52,7 @@ func (x *Resident) String() string {
 func (*Resident) ProtoMessage() {}
 
 func (x *Resident) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[0]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -65,7 +65,7 @@ func (x *Resident) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resident.ProtoReflect.Descriptor instead.
 func (*Resident) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{0}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Resident) GetId() string {
@@ -145,7 +145,7 @@ type CreateResidentRequest struct {
 
 func (x *CreateResidentRequest) Reset() {
 	*x = CreateResidentRequest{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[1]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -157,7 +157,7 @@ func (x *CreateResidentRequest) String() string {
 func (*CreateResidentRequest) ProtoMessage() {}
 
 func (x *CreateResidentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[1]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -170,7 +170,7 @@ func (x *CreateResidentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateResidentRequest.ProtoReflect.Descriptor instead.
 func (*CreateResidentRequest) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{1}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *CreateResidentRequest) GetTenantId() string {
@@ -224,7 +224,7 @@ type CreateResidentResponse struct {
 
 func (x *CreateResidentResponse) Reset() {
 	*x = CreateResidentResponse{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[2]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -236,7 +236,7 @@ func (x *CreateResidentResponse) String() string {
 func (*CreateResidentResponse) ProtoMessage() {}
 
 func (x *CreateResidentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[2]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -249,7 +249,7 @@ func (x *CreateResidentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateResidentResponse.ProtoReflect.Descriptor instead.
 func (*CreateResidentResponse) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{2}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateResidentResponse) GetResident() *Resident {
@@ -269,7 +269,7 @@ type GetResidentRequest struct {
 
 func (x *GetResidentRequest) Reset() {
 	*x = GetResidentRequest{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[3]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +281,7 @@ func (x *GetResidentRequest) String() string {
 func (*GetResidentRequest) ProtoMessage() {}
 
 func (x *GetResidentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[3]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +294,7 @@ func (x *GetResidentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResidentRequest.ProtoReflect.Descriptor instead.
 func (*GetResidentRequest) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{3}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetResidentRequest) GetTenantId() string {
@@ -320,7 +320,7 @@ type GetResidentResponse struct {
 
 func (x *GetResidentResponse) Reset() {
 	*x = GetResidentResponse{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[4]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -332,7 +332,7 @@ func (x *GetResidentResponse) String() string {
 func (*GetResidentResponse) ProtoMessage() {}
 
 func (x *GetResidentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[4]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -345,7 +345,7 @@ func (x *GetResidentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResidentResponse.ProtoReflect.Descriptor instead.
 func (*GetResidentResponse) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{4}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetResidentResponse) GetResident() *Resident {
@@ -369,7 +369,7 @@ type ListResidentsRequest struct {
 
 func (x *ListResidentsRequest) Reset() {
 	*x = ListResidentsRequest{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[5]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +381,7 @@ func (x *ListResidentsRequest) String() string {
 func (*ListResidentsRequest) ProtoMessage() {}
 
 func (x *ListResidentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[5]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +394,7 @@ func (x *ListResidentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResidentsRequest.ProtoReflect.Descriptor instead.
 func (*ListResidentsRequest) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{5}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListResidentsRequest) GetTenantId() string {
@@ -436,7 +436,7 @@ type ListResidentsResponse struct {
 
 func (x *ListResidentsResponse) Reset() {
 	*x = ListResidentsResponse{}
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[6]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -448,7 +448,7 @@ func (x *ListResidentsResponse) String() string {
 func (*ListResidentsResponse) ProtoMessage() {}
 
 func (x *ListResidentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_habyta_residents_v1_residents_proto_msgTypes[6]
+	mi := &file_habbyte_residents_v1_residents_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -461,7 +461,7 @@ func (x *ListResidentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListResidentsResponse.ProtoReflect.Descriptor instead.
 func (*ListResidentsResponse) Descriptor() ([]byte, []int) {
-	return file_habyta_residents_v1_residents_proto_rawDescGZIP(), []int{6}
+	return file_habbyte_residents_v1_residents_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListResidentsResponse) GetResidents() []*Resident {
@@ -478,11 +478,11 @@ func (x *ListResidentsResponse) GetNextPageToken() string {
 	return ""
 }
 
-var File_habyta_residents_v1_residents_proto protoreflect.FileDescriptor
+var File_habbyte_residents_v1_residents_proto protoreflect.FileDescriptor
 
-const file_habyta_residents_v1_residents_proto_rawDesc = "" +
+const file_habbyte_residents_v1_residents_proto_rawDesc = "" +
 	"\n" +
-	"#habyta/residents/v1/residents.proto\x12\x13habyta.residents.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb6\x02\n" +
+	"$habbyte/residents/v1/residents.proto\x12\x14habbyte.residents.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb6\x02\n" +
 	"\bResident\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x17\n" +
@@ -501,64 +501,64 @@ const file_habyta_residents_v1_residents_proto_rawDesc = "" +
 	"\tfull_name\x18\x03 \x01(\tR\bfullName\x12\x14\n" +
 	"\x05email\x18\x04 \x01(\tR\x05email\x12\x14\n" +
 	"\x05phone\x18\x05 \x01(\tR\x05phone\x12!\n" +
-	"\fkeycloak_sub\x18\x06 \x01(\tR\vkeycloakSub\"S\n" +
-	"\x16CreateResidentResponse\x129\n" +
-	"\bresident\x18\x01 \x01(\v2\x1d.habyta.residents.v1.ResidentR\bresident\"A\n" +
+	"\fkeycloak_sub\x18\x06 \x01(\tR\vkeycloakSub\"T\n" +
+	"\x16CreateResidentResponse\x12:\n" +
+	"\bresident\x18\x01 \x01(\v2\x1e.habbyte.residents.v1.ResidentR\bresident\"A\n" +
 	"\x12GetResidentRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"P\n" +
-	"\x13GetResidentResponse\x129\n" +
-	"\bresident\x18\x01 \x01(\v2\x1d.habyta.residents.v1.ResidentR\bresident\"\x88\x01\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"Q\n" +
+	"\x13GetResidentResponse\x12:\n" +
+	"\bresident\x18\x01 \x01(\v2\x1e.habbyte.residents.v1.ResidentR\bresident\"\x88\x01\n" +
 	"\x14ListResidentsRequest\x12\x1b\n" +
 	"\ttenant_id\x18\x01 \x01(\tR\btenantId\x12\x17\n" +
 	"\aunit_id\x18\x02 \x01(\tR\x06unitId\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"|\n" +
-	"\x15ListResidentsResponse\x12;\n" +
-	"\tresidents\x18\x01 \x03(\v2\x1d.habyta.residents.v1.ResidentR\tresidents\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xc6\x02\n" +
-	"\x0fResidentService\x12i\n" +
-	"\x0eCreateResident\x12*.habyta.residents.v1.CreateResidentRequest\x1a+.habyta.residents.v1.CreateResidentResponse\x12`\n" +
-	"\vGetResident\x12'.habyta.residents.v1.GetResidentRequest\x1a(.habyta.residents.v1.GetResidentResponse\x12f\n" +
-	"\rListResidents\x12).habyta.residents.v1.ListResidentsRequest\x1a*.habyta.residents.v1.ListResidentsResponseB\xdb\x01\n" +
-	"\x17com.habyta.residents.v1B\x0eResidentsProtoP\x01ZBgithub.com/CMOT/habyta/backend/gen/habyta/residents/v1;residentsv1\xa2\x02\x03HRX\xaa\x02\x13Habyta.Residents.V1\xca\x02\x13Habyta\\Residents\\V1\xe2\x02\x1fHabyta\\Residents\\V1\\GPBMetadata\xea\x02\x15Habyta::Residents::V1b\x06proto3"
+	"page_token\x18\x04 \x01(\tR\tpageToken\"}\n" +
+	"\x15ListResidentsResponse\x12<\n" +
+	"\tresidents\x18\x01 \x03(\v2\x1e.habbyte.residents.v1.ResidentR\tresidents\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xcc\x02\n" +
+	"\x0fResidentService\x12k\n" +
+	"\x0eCreateResident\x12+.habbyte.residents.v1.CreateResidentRequest\x1a,.habbyte.residents.v1.CreateResidentResponse\x12b\n" +
+	"\vGetResident\x12(.habbyte.residents.v1.GetResidentRequest\x1a).habbyte.residents.v1.GetResidentResponse\x12h\n" +
+	"\rListResidents\x12*.habbyte.residents.v1.ListResidentsRequest\x1a+.habbyte.residents.v1.ListResidentsResponseB\xe1\x01\n" +
+	"\x18com.habbyte.residents.v1B\x0eResidentsProtoP\x01ZCgithub.com/CMOT/habyta/backend/gen/habbyte/residents/v1;residentsv1\xa2\x02\x03HRX\xaa\x02\x14Habbyte.Residents.V1\xca\x02\x14Habbyte\\Residents\\V1\xe2\x02 Habbyte\\Residents\\V1\\GPBMetadata\xea\x02\x16Habbyte::Residents::V1b\x06proto3"
 
 var (
-	file_habyta_residents_v1_residents_proto_rawDescOnce sync.Once
-	file_habyta_residents_v1_residents_proto_rawDescData []byte
+	file_habbyte_residents_v1_residents_proto_rawDescOnce sync.Once
+	file_habbyte_residents_v1_residents_proto_rawDescData []byte
 )
 
-func file_habyta_residents_v1_residents_proto_rawDescGZIP() []byte {
-	file_habyta_residents_v1_residents_proto_rawDescOnce.Do(func() {
-		file_habyta_residents_v1_residents_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_habyta_residents_v1_residents_proto_rawDesc), len(file_habyta_residents_v1_residents_proto_rawDesc)))
+func file_habbyte_residents_v1_residents_proto_rawDescGZIP() []byte {
+	file_habbyte_residents_v1_residents_proto_rawDescOnce.Do(func() {
+		file_habbyte_residents_v1_residents_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_habbyte_residents_v1_residents_proto_rawDesc), len(file_habbyte_residents_v1_residents_proto_rawDesc)))
 	})
-	return file_habyta_residents_v1_residents_proto_rawDescData
+	return file_habbyte_residents_v1_residents_proto_rawDescData
 }
 
-var file_habyta_residents_v1_residents_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
-var file_habyta_residents_v1_residents_proto_goTypes = []any{
-	(*Resident)(nil),               // 0: habyta.residents.v1.Resident
-	(*CreateResidentRequest)(nil),  // 1: habyta.residents.v1.CreateResidentRequest
-	(*CreateResidentResponse)(nil), // 2: habyta.residents.v1.CreateResidentResponse
-	(*GetResidentRequest)(nil),     // 3: habyta.residents.v1.GetResidentRequest
-	(*GetResidentResponse)(nil),    // 4: habyta.residents.v1.GetResidentResponse
-	(*ListResidentsRequest)(nil),   // 5: habyta.residents.v1.ListResidentsRequest
-	(*ListResidentsResponse)(nil),  // 6: habyta.residents.v1.ListResidentsResponse
+var file_habbyte_residents_v1_residents_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_habbyte_residents_v1_residents_proto_goTypes = []any{
+	(*Resident)(nil),               // 0: habbyte.residents.v1.Resident
+	(*CreateResidentRequest)(nil),  // 1: habbyte.residents.v1.CreateResidentRequest
+	(*CreateResidentResponse)(nil), // 2: habbyte.residents.v1.CreateResidentResponse
+	(*GetResidentRequest)(nil),     // 3: habbyte.residents.v1.GetResidentRequest
+	(*GetResidentResponse)(nil),    // 4: habbyte.residents.v1.GetResidentResponse
+	(*ListResidentsRequest)(nil),   // 5: habbyte.residents.v1.ListResidentsRequest
+	(*ListResidentsResponse)(nil),  // 6: habbyte.residents.v1.ListResidentsResponse
 	(*timestamppb.Timestamp)(nil),  // 7: google.protobuf.Timestamp
 }
-var file_habyta_residents_v1_residents_proto_depIdxs = []int32{
-	7, // 0: habyta.residents.v1.Resident.create_time:type_name -> google.protobuf.Timestamp
-	7, // 1: habyta.residents.v1.Resident.update_time:type_name -> google.protobuf.Timestamp
-	0, // 2: habyta.residents.v1.CreateResidentResponse.resident:type_name -> habyta.residents.v1.Resident
-	0, // 3: habyta.residents.v1.GetResidentResponse.resident:type_name -> habyta.residents.v1.Resident
-	0, // 4: habyta.residents.v1.ListResidentsResponse.residents:type_name -> habyta.residents.v1.Resident
-	1, // 5: habyta.residents.v1.ResidentService.CreateResident:input_type -> habyta.residents.v1.CreateResidentRequest
-	3, // 6: habyta.residents.v1.ResidentService.GetResident:input_type -> habyta.residents.v1.GetResidentRequest
-	5, // 7: habyta.residents.v1.ResidentService.ListResidents:input_type -> habyta.residents.v1.ListResidentsRequest
-	2, // 8: habyta.residents.v1.ResidentService.CreateResident:output_type -> habyta.residents.v1.CreateResidentResponse
-	4, // 9: habyta.residents.v1.ResidentService.GetResident:output_type -> habyta.residents.v1.GetResidentResponse
-	6, // 10: habyta.residents.v1.ResidentService.ListResidents:output_type -> habyta.residents.v1.ListResidentsResponse
+var file_habbyte_residents_v1_residents_proto_depIdxs = []int32{
+	7, // 0: habbyte.residents.v1.Resident.create_time:type_name -> google.protobuf.Timestamp
+	7, // 1: habbyte.residents.v1.Resident.update_time:type_name -> google.protobuf.Timestamp
+	0, // 2: habbyte.residents.v1.CreateResidentResponse.resident:type_name -> habbyte.residents.v1.Resident
+	0, // 3: habbyte.residents.v1.GetResidentResponse.resident:type_name -> habbyte.residents.v1.Resident
+	0, // 4: habbyte.residents.v1.ListResidentsResponse.residents:type_name -> habbyte.residents.v1.Resident
+	1, // 5: habbyte.residents.v1.ResidentService.CreateResident:input_type -> habbyte.residents.v1.CreateResidentRequest
+	3, // 6: habbyte.residents.v1.ResidentService.GetResident:input_type -> habbyte.residents.v1.GetResidentRequest
+	5, // 7: habbyte.residents.v1.ResidentService.ListResidents:input_type -> habbyte.residents.v1.ListResidentsRequest
+	2, // 8: habbyte.residents.v1.ResidentService.CreateResident:output_type -> habbyte.residents.v1.CreateResidentResponse
+	4, // 9: habbyte.residents.v1.ResidentService.GetResident:output_type -> habbyte.residents.v1.GetResidentResponse
+	6, // 10: habbyte.residents.v1.ResidentService.ListResidents:output_type -> habbyte.residents.v1.ListResidentsResponse
 	8, // [8:11] is the sub-list for method output_type
 	5, // [5:8] is the sub-list for method input_type
 	5, // [5:5] is the sub-list for extension type_name
@@ -566,26 +566,26 @@ var file_habyta_residents_v1_residents_proto_depIdxs = []int32{
 	0, // [0:5] is the sub-list for field type_name
 }
 
-func init() { file_habyta_residents_v1_residents_proto_init() }
-func file_habyta_residents_v1_residents_proto_init() {
-	if File_habyta_residents_v1_residents_proto != nil {
+func init() { file_habbyte_residents_v1_residents_proto_init() }
+func file_habbyte_residents_v1_residents_proto_init() {
+	if File_habbyte_residents_v1_residents_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_habyta_residents_v1_residents_proto_rawDesc), len(file_habyta_residents_v1_residents_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_habbyte_residents_v1_residents_proto_rawDesc), len(file_habbyte_residents_v1_residents_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_habyta_residents_v1_residents_proto_goTypes,
-		DependencyIndexes: file_habyta_residents_v1_residents_proto_depIdxs,
-		MessageInfos:      file_habyta_residents_v1_residents_proto_msgTypes,
+		GoTypes:           file_habbyte_residents_v1_residents_proto_goTypes,
+		DependencyIndexes: file_habbyte_residents_v1_residents_proto_depIdxs,
+		MessageInfos:      file_habbyte_residents_v1_residents_proto_msgTypes,
 	}.Build()
-	File_habyta_residents_v1_residents_proto = out.File
-	file_habyta_residents_v1_residents_proto_goTypes = nil
-	file_habyta_residents_v1_residents_proto_depIdxs = nil
+	File_habbyte_residents_v1_residents_proto = out.File
+	file_habbyte_residents_v1_residents_proto_goTypes = nil
+	file_habbyte_residents_v1_residents_proto_depIdxs = nil
 }

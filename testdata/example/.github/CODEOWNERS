@@ -10,13 +10,13 @@
 /backend/cmd/api/ @JuanVizcaya
 /backend/internal/api/ @JuanVizcaya
 /backend/cmd/residents/ @JuanVizcaya
-/proto/habyta/residents/ @JuanVizcaya
+/proto/habbyte/residents/ @JuanVizcaya
 /backend/cmd/administrators/ @JuanVizcaya
 /backend/internal/residents/ @JuanVizcaya
-/proto/habyta/administrators/ @JuanVizcaya
-/backend/gen/habyta/residents/ @JuanVizcaya
+/proto/habbyte/administrators/ @JuanVizcaya
+/backend/gen/habbyte/residents/ @JuanVizcaya
 /backend/internal/administrators/ @JuanVizcaya
-/backend/gen/habyta/administrators/ @JuanVizcaya
+/backend/gen/habbyte/administrators/ @JuanVizcaya
 /.env.example @JuanVizcaya
 /.gitattributes @JuanVizcaya
 /.gitignore @JuanVizcaya

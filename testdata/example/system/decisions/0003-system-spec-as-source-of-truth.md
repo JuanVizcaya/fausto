@@ -7,7 +7,7 @@ date: 2026-10-05
 
 ## Context
 
-Several agents implement parts of Habyta in parallel, orchestrated by a human
+Several agents implement parts of Habbyte in parallel, orchestrated by a human
 who reviews design at a high level.
 
 ## Decision

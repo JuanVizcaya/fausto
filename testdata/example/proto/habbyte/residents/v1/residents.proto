@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package habyta.residents.v1;
+package habbyte.residents.v1;
 
 import "google/protobuf/timestamp.proto";
 

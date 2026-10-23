@@ -47,7 +47,7 @@ func TestJiraOffByDefault(t *testing.T) {
 	}
 }
 
-// tempRepo copies the Habyta files (without proposals and tasks) into a
+// tempRepo copies the Habbyte files (without proposals and tasks) into a
 // new git repository on branch main.
 func tempRepo(t *testing.T) string {
 	t.Helper()

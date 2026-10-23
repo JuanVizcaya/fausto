@@ -1,6 +1,6 @@
-# Habyta system model: components, how they connect, and which layer each
+# Habbyte system model: components, how they connect, and which layer each
 # belongs to. `fausto check` verifies the code against this file.
-name: habyta
+name: habbyte
 description: Apartment complex management.
 
 # A layer may depend only on the layers listed in may_depend_on, plus itself
@@ -63,8 +63,8 @@ components:
       cmd: backend/cmd/residents
       compose: residents
     contracts:
-      - proto: proto/habyta/residents/v1
-        generated: backend/gen/habyta/residents/v1
+      - proto: proto/habbyte/residents/v1
+        generated: backend/gen/habbyte/residents/v1
     data:
       - table: residents
         pii: [full_name, email, phone]
@@ -108,8 +108,8 @@ components:
       cmd: backend/cmd/administrators
       compose: administrators
     contracts:
-      - proto: proto/habyta/administrators/v1
-        generated: backend/gen/habyta/administrators/v1
+      - proto: proto/habbyte/administrators/v1
+        generated: backend/gen/habbyte/administrators/v1
     data:
       - table: administrators
         pii: [company, email, phone]

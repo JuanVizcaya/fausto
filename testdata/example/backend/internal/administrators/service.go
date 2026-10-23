@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	administratorsv1 "github.com/CMOT/habyta/backend/gen/habyta/administrators/v1"
+	administratorsv1 "github.com/CMOT/habyta/backend/gen/habbyte/administrators/v1"
 	"github.com/CMOT/habyta/backend/internal/platform/postgres"
 	"github.com/CMOT/habyta/backend/internal/platform/requestid"
 	"github.com/CMOT/habyta/backend/internal/platform/server"

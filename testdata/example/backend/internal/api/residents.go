@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	residentsv1 "github.com/CMOT/habyta/backend/gen/habyta/residents/v1"
+	residentsv1 "github.com/CMOT/habyta/backend/gen/habbyte/residents/v1"
 )
 
 // residentJSON is the browser representation of a resident.

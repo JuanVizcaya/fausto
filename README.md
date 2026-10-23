@@ -9,7 +9,7 @@ and hands the resulting work to agents as tasks.
 
 Fausto is a separate tool: a project doesn't depend on it to build or run,
 and fausto works on a project only through its repository. It was first
-built for [Habyta](https://github.com/CMOT/habyta); `testdata/example` is a
+built for [Habbyte](https://github.com/CMOT/habyta); `testdata/example` is a
 snapshot of that project, used by the tests.
 
 Module `github.com/JuanVizcaya/fausto`, Go 1.27. Install the CLI, then run it
@@ -103,7 +103,7 @@ repository:
 ```sh
 cp .env.example .env    # once; set FAUSTO_MONGO_PASSWORD, FAUSTO_AUTHOR (and FAUSTO_UID/GID on Linux)
 docker compose up -d --build    # http://127.0.0.1:7070
-docker compose exec fausto fausto project add habyta -path /home/you/src/habyta    # its path on your machine; see Projects
+docker compose exec fausto fausto project add habbyte -path /home/you/src/habbyte    # its path on your machine; see Projects
 docker compose restart fausto
 ```
 
@@ -136,10 +136,11 @@ a project depends on fausto, and removing fausto leaves it as it was.
 Register them once:
 
 ```sh
-fausto project add habyta -path ../habyta           # a local clone
-fausto project add habyta -github owner/habyta      # a repository on GitHub
+fausto project add habbyte -path ../habbyte         # a local clone
+fausto project add habbyte -github owner/habbyte    # a repository on GitHub
 fausto project list
-fausto project rm habyta                            # keeps its proposals and tasks
+fausto project rename old-id new-id                 # its proposals, tasks, spec and tokens follow
+fausto project rm habbyte                           # keeps its proposals and tasks
 ```
 
 `fausto serve` serves every registered project, with a picker in the top
@@ -207,7 +208,7 @@ fausto connect -token <token>   # in a clone: work as that agent from it
 `FAUSTO_URL` and `FAUSTO_TOKEN`), and git ignores `.fausto/` through
 `.git/info/exclude`, so the project's `.gitignore` never mentions fausto.
 With docker compose, run the token commands where the database is:
-`docker compose exec fausto fausto token create -project habyta residents`.
+`docker compose exec fausto fausto token create -project habbyte residents`.
 
 
 ## Jira
