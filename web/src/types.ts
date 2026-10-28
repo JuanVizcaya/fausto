@@ -4,6 +4,8 @@ export interface Spec {
   system: System;
   tech: { technologies: Technology[] };
   principles: { principles: Principle[] };
+  /** The project's own checks (checks.yaml): commands that principles name. */
+  checks: { checks: ProjectCheck[] | null };
   domains: { domains: Domain[]; glossary?: Term[] };
   roadmap: { milestones: Milestone[] };
   requirements: { requirements: Requirement[] };
@@ -121,6 +123,14 @@ export interface Risk {
   decisions?: string[];
 }
 
+export interface ProjectCheck {
+  id: string;
+  title: string;
+  run: string;
+  dir?: string;
+  timeout?: string;
+}
+
 export interface Principle {
   id: string;
   title: string;
@@ -173,6 +183,8 @@ export interface CheckResult {
   check: string;
   description: string;
   principles: string[];
+  /** A project check's command; built-in checks have none. */
+  command?: string;
   status: "pass" | "fail" | "skipped";
   findings: Finding[];
 }
@@ -296,6 +308,7 @@ export type Kind =
   | "layer"
   | "technology"
   | "principle"
+  | "check"
   | "domain"
   | "term"
   | "agent"

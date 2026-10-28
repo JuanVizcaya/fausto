@@ -25,6 +25,9 @@ func (report *Report) WriteText(w io.Writer) {
 			}
 			fmt.Fprintf(w, "         - %s%s\n", loc, f.Message)
 		}
+		if r.Command != "" && r.Status == Skipped {
+			fmt.Fprintf(w, "         - not run: %s (run it with fausto check -commands)\n", r.Command)
+		}
 		if r.Status == Fail {
 			failed++
 		}

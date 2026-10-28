@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -104,6 +105,7 @@ func checkReferences(s *spec.Spec) []Finding {
 	ids(s.Principles.Principles, func(p spec.Principle) string { return p.ID }, func(id string) {
 		add("", spec.Dir+"/principles.yaml", "duplicate principle %q", id)
 	})
+	out = append(out, checkProjectChecks(s)...)
 	ids(s.Domains.Domains, func(d spec.Domain) string { return d.ID }, func(id string) {
 		add("", spec.Dir+"/domains.yaml", "duplicate domain %q", id)
 	})
@@ -238,6 +240,39 @@ func ids[T any](items []T, id func(T) string, dup func(string)) map[string]bool 
 	return seen
 }
 
+// Review is what a principle lists in its checks when people and reviewers,
+// not a command, enforce it.
+const Review = "review"
+
+// checkProjectChecks verifies checks.yaml, and that every check a principle
+// names is a built-in check, a project check, or review.
+func checkProjectChecks(s *spec.Spec) []Finding {
+	var out []Finding
+	const file = spec.Dir + "/checks.yaml"
+	project := ids(s.Checks.Checks, func(c spec.ProjectCheck) string { return c.ID }, func(id string) {
+		out = append(out, Finding{Message: fmt.Sprintf("duplicate check %q", id), Path: file})
+	})
+	for _, c := range s.Checks.Checks {
+		if slices.Contains(knownChecks, c.ID) || c.ID == Review {
+			out = append(out, Finding{Message: fmt.Sprintf("check %q has the name of a built-in check", c.ID), Path: file})
+		}
+		if d := path.Clean(c.Dir); c.Dir != "" && (path.IsAbs(d) || d == ".." || strings.HasPrefix(d, "../")) {
+			out = append(out, Finding{Message: fmt.Sprintf("check %q: dir %q must be inside the repository", c.ID, c.Dir), Path: file})
+		}
+	}
+	for _, p := range s.Principles.Principles {
+		for _, name := range p.Checks {
+			if !slices.Contains(knownChecks, name) && !project[name] && name != Review {
+				out = append(out, Finding{
+					Message: fmt.Sprintf("principle %q names unknown check %q (built-in: %s; project checks are declared in %s; or %s)", p.ID, name, strings.Join(knownChecks, ", "), file, Review),
+					Path:    spec.Dir + "/principles.yaml",
+				})
+			}
+		}
+	}
+	return out
+}
+
 // checkRoadmap verifies milestone references, that milestone dependencies
 // form no cycle, and that done milestones are really done.
 func checkRoadmap(s *spec.Spec, components, decisions map[string]bool) []Finding {
@@ -349,8 +384,8 @@ func checkRequirements(s *spec.Spec, components, layers map[string]bool) []Findi
 		}
 		name, rule, hasRule := strings.Cut(r.VerifiedBy, "/")
 		switch {
-		case !slices.Contains(knownChecks, name):
-			add("requirement %q is verified by unknown check %q (available: %s)", r.ID, name, strings.Join(knownChecks, ", "))
+		case !slices.Contains(knownChecks, name) && s.Checks.Check(name) == nil:
+			add("requirement %q is verified by unknown check %q (built-in: %s; or a project check in %s/checks.yaml)", r.ID, name, strings.Join(knownChecks, ", "), spec.Dir)
 		case hasRule && name != "runtime":
 			add("requirement %q: only the runtime check has rules", r.ID)
 		case name == "runtime" && !hasRule:

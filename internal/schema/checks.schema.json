@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "checks.schema.json",
+  "title": "Project checks",
+  "description": "Commands that verify the project's own rules, such as its tests or linters. Principles name them in their checks, next to fausto's built-in checks. They run only where the project's code may run (fausto check -commands, as in CI), never on fausto's server.",
+  "type": "object",
+  "required": ["checks"],
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "run"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "Name principles use; it may not be a built-in check's name or review."},
+          "title": {"type": "string", "minLength": 1, "description": "What the command verifies."},
+          "run": {"type": "string", "minLength": 1, "description": "Shell command (sh -c); exit status 0 means it passes."},
+          "dir": {"type": "string", "description": "Directory to run it in, relative to the repository root (default: the root)."},
+          "timeout": {"type": "string", "pattern": "^[0-9]+(s|m|h)$", "description": "Longest it may run, such as 90s or 10m (default: 10m)."}
+        }
+      }
+    }
+  }
+}

@@ -52,7 +52,9 @@ func main() {
 }
 
 const usage = `usage:
-  fausto check [-root dir] [-json] [-github] [-commands-dir d] [-compose-file f] [-proto-root d] [check ...]
+  fausto check [-root dir] [-json] [-github] [-commands] [-commands-dir d] [-compose-file f] [-proto-root d] [check ...]
+                               -commands also runs the project checks (system/checks.yaml):
+                               the project's code, so only where it may run
   fausto agents [-root dir] [-project id]
                                regenerate .claude/agents and .github/CODEOWNERS
                                from the charters (fausto's, or system/agents)
@@ -132,6 +134,7 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	root := rootFlag(fs)
 	project := projectFlag(fs)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
+	commands := fs.Bool("commands", false, "also run the project checks' commands (system/checks.yaml); their output goes to stderr")
 	github := fs.Bool("github", os.Getenv("GITHUB_ACTIONS") == "true", "also annotate findings for GitHub Actions and write the job summary (default: on in GitHub Actions)")
 	var layout spec.Layout
 	fs.StringVar(&layout.CommandsDir, "commands-dir", "", "where Go commands live (default: .fausto.yaml's, or "+spec.DefaultLayout.CommandsDir+")")
@@ -148,7 +151,13 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	defer stop()
 	opts := specOptions(ctx, *root, *project, stderr)
 	opts.Layout = &layout
-	report, err := check.RunWith(*root, fs.Args(), opts)
+	var report *check.Report
+	var err error
+	if *commands {
+		report, err = check.RunCommands(*root, fs.Args(), opts, check.Commands{Ctx: ctx, Output: stderr})
+	} else {
+		report, err = check.RunWith(*root, fs.Args(), opts)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2

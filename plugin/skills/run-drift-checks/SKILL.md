@@ -20,12 +20,19 @@ repository root. Without fausto installed:
 | `runtime` | Compose services meet the runtime rules requirements ask for |
 | `agents` | files generated from the charters (CODEOWNERS) are current |
 
+The project may add its own checks in `system/checks.yaml`: commands such as
+its tests and linters, which its principles name. They run only when asked:
+`fausto_check` with `commands: true`, or `fausto check -commands`. Run them
+before finishing; elsewhere they are listed as skipped.
+
 Reading the results:
 
 - Each finding names a component and a path; fix the ones in paths you own.
 - A finding means the code and the spec disagree. Change the code to match
   the spec; if the spec is wrong, don't edit `system/`: say what should
   change, and the orchestrator proposes it in fausto.
+- A failed project check's finding ends with the command's output; fix it
+  as you would a failing test.
 - `ownership` and `agents` are skipped where fausto's charters can't be
   read (no connection, as in CI); that is expected.
 - A project laid out unlike fausto's defaults (`backend/cmd`, `compose.yaml`,

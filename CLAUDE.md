@@ -30,7 +30,9 @@ fast-start version.
 - `internal/spec` — parses all of a project's `system/` into typed Go structs
 - `internal/schema` — the embedded JSON Schemas for the spec files
 - `internal/check` — the 8 drift checks (`schema`, `services`, `layers`,
-  `db-ownership`, `contracts`, `ownership`, `runtime`, `agents`)
+  `db-ownership`, `contracts`, `ownership`, `runtime`, `agents`), and the
+  project checks of `system/checks.yaml` (commands, run only with
+  `-commands`, never on the server; `project.go`)
 - `internal/code` — read-only Go/proto analysis (`go/parser`, no
   compilation) powering the Architecture drill-down views
 - `internal/edit` — applies structured, diff-minimizing edits to spec YAML

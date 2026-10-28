@@ -205,6 +205,7 @@ type specView struct {
 	System       spec.System       `json:"system"`
 	Tech         spec.Tech         `json:"tech"`
 	Principles   spec.Principles   `json:"principles"`
+	Checks       spec.Checks       `json:"checks"`
 	Domains      spec.Domains      `json:"domains"`
 	Roadmap      spec.Roadmap      `json:"roadmap"`
 	Requirements spec.Requirements `json:"requirements"`
@@ -238,6 +239,7 @@ func view(s *spec.Spec) specView {
 		System:       s.System,
 		Tech:         s.Tech,
 		Principles:   s.Principles,
+		Checks:       s.Checks,
 		Domains:      s.Domains,
 		Roadmap:      s.Roadmap,
 		Requirements: s.Requirements,

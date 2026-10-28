@@ -5,8 +5,10 @@ package check
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -39,11 +41,13 @@ const (
 
 // Result is the outcome of one check.
 type Result struct {
-	Check       string    `json:"check"`
-	Description string    `json:"description"`
-	Principles  []string  `json:"principles"`
-	Status      Status    `json:"status"`
-	Findings    []Finding `json:"findings"`
+	Check       string   `json:"check"`
+	Description string   `json:"description"`
+	Principles  []string `json:"principles"`
+	// Command is a project check's command; built-in checks have none.
+	Command  string    `json:"command,omitempty"`
+	Status   Status    `json:"status"`
+	Findings []Finding `json:"findings"`
 }
 
 // Report is the outcome of a run.
@@ -96,23 +100,57 @@ func Names() []string {
 }
 
 // Run loads the spec under root and runs the named checks, or all checks if
-// names is empty.
+// names is empty. Project checks are reported as skipped: their commands are
+// the project's code, so only RunCommands runs them.
 func Run(root string, names []string) (*Report, error) { return RunWith(root, names, spec.Options{}) }
 
 // RunWith is Run with the spec read with o.
 func RunWith(root string, names []string, o spec.Options) (*Report, error) {
-	for _, n := range names {
-		if !slices.Contains(Names(), n) {
-			return nil, fmt.Errorf("unknown check %q (available: %s)", n, strings.Join(Names(), ", "))
-		}
+	return runWith(root, names, o, nil)
+}
+
+// Commands runs project checks' commands for RunCommands.
+type Commands struct {
+	// Ctx stops a running command when it is done.
+	Ctx context.Context
+	// Output, when not nil, also receives each command's output as it runs.
+	Output io.Writer
+}
+
+// RunCommands is RunWith that also runs the project checks' commands. Call
+// it only where the project's code may run, such as CI, never on fausto's
+// server.
+func RunCommands(root string, names []string, o spec.Options, c Commands) (*Report, error) {
+	if c.Ctx == nil {
+		c.Ctx = context.Background()
 	}
+	return runWith(root, names, o, &c)
+}
+
+func runWith(root string, names []string, o spec.Options, commands *Commands) (*Report, error) {
 	files, err := projectFiles(root, o)
 	if err != nil {
 		return nil, err
 	}
 	s, loadErr := spec.LoadWith(root, o)
+	for _, n := range names {
+		if !slices.Contains(Names(), n) && (s == nil || s.Checks.Check(n) == nil) {
+			return nil, fmt.Errorf("unknown check %q (available: %s)", n, strings.Join(availableChecks(s), ", "))
+		}
+	}
 	repo := &Repo{Root: root, Spec: s, Files: files}
-	return run(repo, loadErr, names), nil
+	return run(repo, loadErr, names, commands), nil
+}
+
+// availableChecks names the built-in checks and s's project checks.
+func availableChecks(s *spec.Spec) []string {
+	names := Names()
+	if s != nil {
+		for _, c := range s.Checks.Checks {
+			names = append(names, c.ID)
+		}
+	}
+	return names
 }
 
 // projectFiles returns the project's files: the repository's, and, for a
@@ -131,7 +169,7 @@ func projectFiles(root string, o spec.Options) ([]string, error) {
 	return files, nil
 }
 
-func run(repo *Repo, loadErr error, names []string) *Report {
+func run(repo *Repo, loadErr error, names []string, commands *Commands) *Report {
 	principles := map[string][]string{}
 	if repo.Spec != nil {
 		for _, p := range repo.Spec.Principles.Principles {
@@ -163,6 +201,26 @@ func run(repo *Repo, loadErr error, names []string) *Report {
 			r.Status = Pass
 			if len(r.Findings) > 0 {
 				r.Status = Fail
+				report.OK = false
+			}
+		}
+		report.Results = append(report.Results, r)
+	}
+	if repo.Spec == nil {
+		return report
+	}
+	for _, c := range repo.Spec.Checks.Checks {
+		if len(names) > 0 && !slices.Contains(names, c.ID) {
+			continue
+		}
+		r := Result{Check: c.ID, Description: c.Title, Principles: principles[c.ID], Command: c.Run, Status: Skipped, Findings: []Finding{}}
+		if r.Principles == nil {
+			r.Principles = []string{}
+		}
+		if commands != nil {
+			r.Status = Pass
+			if f := runProjectCheck(repo.Root, c, *commands); f != nil {
+				r.Status, r.Findings = Fail, []Finding{*f}
 				report.OK = false
 			}
 		}

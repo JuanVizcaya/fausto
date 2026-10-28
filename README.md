@@ -58,6 +58,36 @@ proto_root: api/proto
 
 or passes `-commands-dir`, `-compose-file` and `-proto-root`.
 
+### Project checks
+
+A project's own rules are often enforced by its own tests and linters. It
+declares those commands in `system/checks.yaml`, and its principles name them
+next to the built-in checks, or name `review` when people enforce them:
+
+```yaml
+# system/checks.yaml
+checks:
+  - id: module-boundaries
+    title: Module boundaries hold (internal/archtest).
+    run: go test ./internal/archtest/
+    dir: backend        # relative to the repository root; default: the root
+    timeout: 5m         # default: 10m
+
+# system/principles.yaml
+principles:
+  - id: contracts-only
+    title: Modules meet only through contracts
+    rationale: ...
+    checks: [layers, module-boundaries]
+```
+
+A command is the project's code, so `fausto check` runs it only with
+`-commands`: in CI, and in an agent's clone (the `fausto_check` tool's
+`commands` argument). Without it, and always on fausto's server (the web UI
+and `fausto/check` on pull requests), project checks are listed as skipped.
+A failed command's finding keeps the end of its output; with `-commands`, the
+whole output also goes to stderr.
+
 ### A modular monolith
 
 A component can run inside another one's process, as a module does in a

@@ -25,6 +25,7 @@ type Spec struct {
 	System       System
 	Tech         Tech
 	Principles   Principles
+	Checks       Checks
 	Domains      Domains
 	Roadmap      Roadmap
 	Requirements Requirements
@@ -134,6 +135,30 @@ type Principle struct {
 	Title     string   `json:"title"`
 	Rationale string   `json:"rationale"`
 	Checks    []string `json:"checks,omitempty"`
+}
+
+// Checks are the project's own checks: commands, kept in checks.yaml.
+type Checks struct {
+	Checks []ProjectCheck `json:"checks"`
+}
+
+// ProjectCheck is a command that verifies one of the project's rules.
+type ProjectCheck struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Run     string `json:"run"`
+	Dir     string `json:"dir,omitempty"`
+	Timeout string `json:"timeout,omitempty"`
+}
+
+// Check returns the project check named id, or nil.
+func (c Checks) Check(id string) *ProjectCheck {
+	for i := range c.Checks {
+		if c.Checks[i].ID == id {
+			return &c.Checks[i]
+		}
+	}
+	return nil
 }
 
 type Domains struct {
@@ -440,6 +465,7 @@ func LoadWith(root string, o Options) (*Spec, error) {
 		{"system.yaml", "system.schema.json", &s.System, false},
 		{"tech.yaml", "tech.schema.json", &s.Tech, false},
 		{"principles.yaml", "principles.schema.json", &s.Principles, false},
+		{"checks.yaml", "checks.schema.json", &s.Checks, true},
 		{"domains.yaml", "domains.schema.json", &s.Domains, true},
 		{"roadmap.yaml", "roadmap.schema.json", &s.Roadmap, true},
 		{"requirements.yaml", "requirements.schema.json", &s.Requirements, true},

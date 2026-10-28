@@ -151,9 +151,10 @@ var tools = []tool{
 		map[string]any{"type": "object", "properties": map[string]any{
 			"path": map[string]any{"type": "string", "description": "A spec file, such as system/system.yaml or system/decisions/0001-....md."},
 		}}},
-	{"fausto_check", "Run fausto's drift checks on this clone: the code against the architecture spec in system/. Name checks to run only those.",
+	{"fausto_check", "Run fausto's drift checks on this clone: the code against the architecture spec in system/. Name checks to run only those. With commands, also run the project checks in system/checks.yaml (tests, linters): do that before finishing.",
 		map[string]any{"type": "object", "properties": map[string]any{
-			"checks": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": check.Names()}},
+			"checks":   map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Built-in checks (" + strings.Join(check.Names(), ", ") + ") or project check ids."},
+			"commands": map[string]any{"type": "boolean", "description": "Also run the project checks' commands."},
 		}}},
 }
 
@@ -161,10 +162,11 @@ var errNotConnected = errors.New("this clone isn't connected to fausto: run `fau
 
 func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (string, error) {
 	var a struct {
-		ID     string   `json:"id"`
-		Path   string   `json:"path"`
-		Status []string `json:"status"`
-		Checks []string `json:"checks"`
+		ID       string   `json:"id"`
+		Path     string   `json:"path"`
+		Status   []string `json:"status"`
+		Checks   []string `json:"checks"`
+		Commands bool     `json:"commands"`
 	}
 	if len(args) > 0 {
 		if err := json.Unmarshal(args, &a); err != nil {
@@ -241,11 +243,6 @@ func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (s
 		if s.Root == "" {
 			return "", errors.New("not in a project clone: no " + spec.Dir + "/system.yaml here or above")
 		}
-		for _, c := range a.Checks {
-			if !slices.Contains(check.Names(), c) {
-				return "", fmt.Errorf("unknown check %q (available: %s)", c, strings.Join(check.Names(), ", "))
-			}
-		}
 		var opts spec.Options
 		if s.Client != nil {
 			files, _, err := s.Client.Spec(ctx)
@@ -254,7 +251,13 @@ func (s *Server) call(ctx context.Context, name string, args json.RawMessage) (s
 			}
 			opts.Files = files
 		}
-		report, err := check.RunWith(s.Root, a.Checks, opts)
+		var report *check.Report
+		var err error
+		if a.Commands {
+			report, err = check.RunCommands(s.Root, a.Checks, opts, check.Commands{Ctx: ctx})
+		} else {
+			report, err = check.RunWith(s.Root, a.Checks, opts)
+		}
 		if err != nil {
 			return "", err
 		}

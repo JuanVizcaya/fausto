@@ -79,6 +79,7 @@ function collection(s: Spec, kind: Kind): Record<string, unknown>[] {
     layer: () => s.system.layers,
     technology: () => s.tech.technologies,
     principle: () => s.principles.principles,
+    check: () => (s.checks.checks ??= []),
     domain: () => s.domains.domains,
     term: () => (s.domains.glossary ??= []),
     agent: () => s.agents,

@@ -10,7 +10,8 @@ export function HealthView({ spec, report, item, info, reload }: ViewProps) {
   useEffect(() => {
     if (item) document.getElementById(item)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [item]);
-  const status = (checks: string[] = []) => {
+  const status = (all: string[] = []) => {
+    const checks = all.filter((c) => c !== "review");
     if (checks.length === 0) return "manual";
     if (!report) return "skipped";
     const results = report.results.filter((r) => checks.includes(r.check));
@@ -21,7 +22,7 @@ export function HealthView({ spec, report, item, info, reload }: ViewProps) {
   const failed = report?.results.filter((r) => r.status === "fail").length ?? 0;
   return (
     <>
-      <Section title="Drift checks">
+      <Section title="Drift checks" aside={<EditButton kind="check" label="Add project check" />}>
         {!report ? (
           <Empty>Checks not loaded.</Empty>
         ) : (
@@ -53,11 +54,23 @@ export function HealthView({ spec, report, item, info, reload }: ViewProps) {
                     <StatusPill status={r.status} />
                   </div>
                   <p>{r.description}</p>
+                  {r.command && (
+                    <p className="muted small">
+                      <Code>{r.command}</Code> <EditButton kind="check" id={r.check} />
+                      {r.status === "skipped" && (
+                        <>
+                          <br />A project check: it runs in CI and in agents' clones (<Code>fausto check -commands</Code>), never on
+                          fausto's server.
+                        </>
+                      )}
+                    </p>
+                  )}
                   {r.findings.length > 0 && (
                     <ul className="findings">
                       {r.findings.map((f, i) => (
                         <li key={i}>
-                          {f.component && <a href={`#/architecture/${f.component}`}>{f.component}</a>} {f.message}
+                          {f.component && <a href={`#/architecture/${f.component}`}>{f.component}</a>}{" "}
+                          {f.message.includes("\n") ? <pre className="mono small output">{f.message}</pre> : f.message}
                           {f.path && <div className="muted"><Code>{f.path}</Code></div>}
                         </li>
                       ))}
@@ -74,8 +87,9 @@ export function HealthView({ spec, report, item, info, reload }: ViewProps) {
 
       <Section title="Implementation principles" aside={<EditButton kind="principle" label="Add principle" />}>
         <p className="lede">
-          Every agent follows these. Principles with checks are enforced by <code className="code">fausto check</code>; the
-          rest are reviewed by hand.
+          Every agent follows these. Principles with checks are enforced by <code className="code">fausto check</code>: its
+          built-in checks, or the project's own (their commands). Those marked <code className="code">review</code>, and those
+          with no checks, are reviewed by people.
         </p>
         <ol className="principles">
           {spec.principles.principles.map((p) => (
@@ -94,7 +108,7 @@ export function HealthView({ spec, report, item, info, reload }: ViewProps) {
                 {p.checks?.map((c, i) => (
                   <span key={c}>
                     {i > 0 && ", "}
-                    <a href={`#/health/${c}`}>{c}</a>
+                    {c === "review" ? "review" : <a href={`#/health/${c}`}>{c}</a>}
                   </span>
                 ))}
               </p>
