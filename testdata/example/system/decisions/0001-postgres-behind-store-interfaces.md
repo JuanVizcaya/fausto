@@ -3,7 +3,7 @@ id: "0001"
 title: Use Postgres for now, behind store interfaces
 status: accepted
 date: 2026-10-03
-affects: [residents, residents-db]
+affects: [postgres, platform]
 ---
 
 ## Context

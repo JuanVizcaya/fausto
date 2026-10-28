@@ -1,68 +1,90 @@
-# Milestones in roadmap order. A milestone is done when every exit
-# criterion is met and its components are no longer planned.
+# Milestones in roadmap order, from the architecture design. A milestone is
+# done when every exit criterion is met and its components are no longer
+# planned. After M1, M2, M3, M5 and M6 can run in parallel.
 milestones:
-  - id: residents-mvp
-    title: Residents MVP
-    goal: Managers can register residents, look them up, and list them per unit through the public API.
+  - id: m0-foundations
+    title: M0 Foundations
+    goal: Every product can be built on a working platform, sign-in, and recoverable data.
     status: in-progress
-    components: [residents, residents-db, api]
-    decisions: ["0001", "0002"]
+    components: [habbyte, api, platform, caddy, keycloak, postgres, iam, files, audit]
+    decisions: ["0001", "0007"]
     exit_criteria:
-      - text: Residents gRPC service with create, get, and list
+      - text: The backend is a modular monolith with 14 registered modules and a boundary test
         done: true
-      - text: Postgres storage with migrations and readiness checks
+      - text: Caddy in front of the backend and Keycloak
         done: true
-      - text: Public HTTP endpoints for residents in the gateway
-        done: true
-      - text: Update and remove residents
+      - text: Per-module schemas and roles, row-level security, the outbox and River in the platform
+      - text: A user signs in with Google in the browser and in both native shells
+      - text: A test event reaches audit
+      - text: A restore drill passes
+      - text: Terraform, staging and production hosts, and CI/CD
 
-  - id: public-api-v1
-    title: Public API v1
-    goal: The gateway is safe to expose to the web app and partners.
+  - id: m1-onboarding
+    title: M1 Onboarding and governance
+    goal: A new development goes live without touching the database, and the governance rules hold against the admin.
     status: planned
-    depends_on: [residents-mvp]
-    components: [api]
+    depends_on: [m0-foundations]
+    components: [developments, iam, control]
     exit_criteria:
-      - text: Requests are authenticated with Keycloak tokens
-      - text: The tenant comes from the token, never from the client alone
-      - text: The error model and endpoints are documented
+      - text: Development profile, structure, units, CSV import, occupancy, committee and admin assignment
+      - text: Invitations, roles and grants, with grants derived from occupancy and governance
+      - text: Organizations and plans in control
 
-  - id: properties-mvp
-    title: Properties MVP
-    goal: Complexes, buildings, and units are managed by a properties service that other services can rely on.
+  - id: m2-finance
+    title: M2 Finance core
+    goal: Residents are charged and their payments reconciled with manual evidence.
     status: planned
+    depends_on: [m1-onboarding]
+    components: [finance, notifications]
     exit_criteria:
-      - text: Properties service declared in system/ with contract proto/habbyte/properties/v1
-      - text: Complexes, buildings, and units can be created and listed per tenant
-      - text: Public HTTP endpoints for properties in the gateway
-      - text: Residents validate unit ids against the properties service
+      - text: Concepts, fee schedules, charges, the ledger and statements
+      - text: Payment evidence and reconciliation, delinquency and reminders
+      - text: The PRD's finance and payments criteria pass with manual evidence
 
-  - id: billing-mvp
-    title: Billing MVP
-    goal: Managers can invoice residents for monthly fees.
+  - id: m3-access
+    title: M3 Physical access
+    goal: Ending an occupancy revokes access on real hardware within 5 minutes.
     status: planned
-    depends_on: [properties-mvp, residents-mvp]
-    components: [api]
+    depends_on: [m1-onboarding]
+    components: [accesscontrol, devices]
     exit_criteria:
-      - text: Billing service declared in system/ with contract proto/habbyte/billing/v1
-      - text: Monthly fees per unit generate invoices for its residents
-      - text: Public HTTP endpoints for invoices in the gateway
+      - text: The first vendor adapter, with a vendor spike started during M0
+      - text: Consent records and remote opening
+      - text: Ending an occupancy revokes access on real hardware within 5 minutes
 
-  - id: maintenance-mvp
-    title: Maintenance MVP
-    goal: Residents can report problems and managers can track them to completion.
+  - id: m4-payments
+    title: M4 Online payments and CFDI
+    goal: A sandbox payment reaches the ledger and a stamped CFDI reaches the payer.
     status: planned
-    depends_on: [properties-mvp]
+    depends_on: [m2-finance]
+    components: [payments, invoicing]
     exit_criteria:
-      - text: Maintenance service declared in system/ with contract proto/habbyte/maintenance/v1
-      - text: Requests move through open, in progress, and resolved
+      - text: Mercado Pago account connection, checkout and webhooks
+      - text: Invoicing with the chosen PAC
 
-  - id: web-app-v1
-    title: Web app v1
-    goal: Managers do their daily work in the browser instead of through the API.
+  - id: m5-community
+    title: M5 Community and amenities
+    goal: The PRD's criteria for announcements, documents and amenities pass.
     status: planned
-    depends_on: [public-api-v1]
-    components: [web]
+    depends_on: [m1-onboarding]
+    components: [community, amenities]
+
+  - id: m6-operations
+    title: M6 Operations
+    goal: A task goes from creation to closure as in the PRD's Servicios criterion.
+    status: planned
+    depends_on: [m1-onboarding]
+    components: [operations]
     exit_criteria:
-      - text: Managers sign in with Keycloak
-      - text: Residents and units can be managed from the UI
+      - text: Tasks, recurrence, evidence, validation and guest links
+
+  - id: m7-pilot
+    title: M7 Pilot readiness
+    goal: Every PRD acceptance criterion passes in staging, and the pilot starts.
+    status: planned
+    depends_on: [m2-finance, m3-access, m4-payments, m5-community, m6-operations]
+    components: [control, web]
+    exit_criteria:
+      - text: Control support and break-glass access, and usage metrics
+      - text: A security review and a load test at twice the expected peak
+      - text: Runbooks

@@ -1,0 +1,13 @@
+id: platform
+name: Platform agent
+kind: agent
+scope: Shared service platform, build, local runtime, and protobuf tooling.
+owns:
+  - backend/
+  - compose.yaml
+  - .env.example
+  - buf.yaml
+  - buf.gen.yaml
+rules:
+  - Keep platform packages free of domain logic; they must not import any service package.
+  - Changes to service.Main or server.Server affect every service; note them in the PR.

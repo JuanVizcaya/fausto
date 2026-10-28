@@ -52,10 +52,15 @@ func main() {
 }
 
 const usage = `usage:
-  fausto check [-root dir] [-json] [-github] [-commands-dir d] [-compose-file f] [-proto-root d] [check ...]
-  fausto agents [-root dir] [-project id]
+  fausto check [-root dir] [-json] [-github] [-commands] [-spec-from dir] [-commands-dir d] [-compose-file f] [-proto-root d] [check ...]
+                               -commands also runs the project checks (system/checks.yaml):
+                               the project's code, so only where it may run;
+                               -spec-from reads the spec fausto keeps from dir/system,
+                               such as a pull request's handed-off spec ref
+  fausto agents [-root dir] [-project id] [-spec-from dir] [-print id]
                                regenerate .claude/agents and .github/CODEOWNERS
-                               from the charters (fausto's, or system/agents)
+                               from the charters (fausto's, or system/agents);
+                               -print writes one agent's definition to stdout instead
   fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
                                the web UI, for every project (or only -root)
   fausto project list
@@ -132,6 +137,8 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	root := rootFlag(fs)
 	project := projectFlag(fs)
 	asJSON := fs.Bool("json", false, "print the report as JSON")
+	commands := fs.Bool("commands", false, "also run the project checks' commands (system/checks.yaml); their output goes to stderr")
+	specFrom := fs.String("spec-from", "", "read the spec fausto keeps from `dir`/system instead of fausto, as a pull request's workflow does with its handed-off spec ref")
 	github := fs.Bool("github", os.Getenv("GITHUB_ACTIONS") == "true", "also annotate findings for GitHub Actions and write the job summary (default: on in GitHub Actions)")
 	var layout spec.Layout
 	fs.StringVar(&layout.CommandsDir, "commands-dir", "", "where Go commands live (default: .fausto.yaml's, or "+spec.DefaultLayout.CommandsDir+")")
@@ -146,9 +153,25 @@ func runCheck(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	opts := specOptions(ctx, *root, *project, stderr)
+	var opts spec.Options
+	if *specFrom != "" {
+		files, err := spec.ReadDir(*specFrom)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		opts.Files = files
+	} else {
+		opts = specOptions(ctx, *root, *project, stderr)
+	}
 	opts.Layout = &layout
-	report, err := check.RunWith(*root, fs.Args(), opts)
+	var report *check.Report
+	var err error
+	if *commands {
+		report, err = check.RunCommands(*root, fs.Args(), opts, check.Commands{Ctx: ctx, Output: stderr})
+	} else {
+		report, err = check.RunWith(*root, fs.Args(), opts)
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
@@ -185,6 +208,8 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	root := rootFlag(fs)
 	project := projectFlag(fs)
+	specFrom := fs.String("spec-from", "", "read the spec fausto keeps from `dir`/system instead of fausto")
+	printID := fs.String("print", "", "write agent `id`'s definition to stdout, and nothing else")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -194,9 +219,30 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	s, err := spec.LoadWith(*root, specOptions(ctx, *root, *project, stderr))
+	var opts spec.Options
+	if *specFrom != "" {
+		files, err := spec.ReadDir(*specFrom)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		opts.Files = files
+	} else {
+		opts = specOptions(ctx, *root, *project, stderr)
+	}
+	s, err := spec.LoadWith(*root, opts)
 	if err != nil {
 		fmt.Fprintln(stderr, "load the spec:", err)
+		return 1
+	}
+	if *printID != "" {
+		for i := range s.Agents {
+			if a := &s.Agents[i]; a.ID == *printID && a.Kind != "human" {
+				stdout.Write(agentdef.Render(s, a))
+				return 0
+			}
+		}
+		fmt.Fprintf(stderr, "no agent %q in the charters\n", *printID)
 		return 1
 	}
 	files, err := agentdef.Sync(*root, s)
@@ -386,7 +432,8 @@ func openProject(ctx context.Context, p store.Project, db *mongostore.DB, dbErr 
 	case poll <= 0:
 		o.PRCheckOff = "polling is off (-poll 0)"
 	default:
-		o.PRCheck = &prcheck.Checker{Repo: gh, GH: &github.Client{Token: token}, DB: ps.DB, Clone: filepath.Join(dataDir(), "repos", p.ID+"-prs.git")}
+		o.PRCheck = &prcheck.Checker{Repo: gh, GH: &github.Client{Token: token}, DB: ps.DB, Clone: filepath.Join(dataDir(), "repos", p.ID+"-prs.git"),
+			HandOff: os.Getenv("FAUSTO_PR_HANDOFF") == "true"}
 	}
 	return server.New(o), nil
 }

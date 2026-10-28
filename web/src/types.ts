@@ -4,6 +4,8 @@ export interface Spec {
   system: System;
   tech: { technologies: Technology[] };
   principles: { principles: Principle[] };
+  /** The project's own checks (checks.yaml): commands that principles name. */
+  checks: { checks: ProjectCheck[] | null };
   domains: { domains: Domain[]; glossary?: Term[] };
   roadmap: { milestones: Milestone[] };
   requirements: { requirements: Requirement[] };
@@ -46,15 +48,16 @@ export interface Component {
   owner: string;
   tech?: string[];
   paths?: string[];
-  runtime?: { cmd?: string; compose?: string };
-  contracts?: { proto: string; generated?: string }[];
+  runtime?: { cmd?: string; compose?: string; host?: string; image?: string };
+  contracts?: { proto?: string; generated?: string; go?: string }[];
   data?: { table: string; pii?: string[] }[];
   depends_on?: Dependency[];
 }
 
 export interface Dependency {
   target: string;
-  protocol: "http" | "grpc" | "sql" | "library";
+  protocol: "http" | "grpc" | "sql" | "library" | "contract";
+  schema?: string;
   description?: string;
 }
 
@@ -120,6 +123,14 @@ export interface Risk {
   decisions?: string[];
 }
 
+export interface ProjectCheck {
+  id: string;
+  title: string;
+  run: string;
+  dir?: string;
+  timeout?: string;
+}
+
 export interface Principle {
   id: string;
   title: string;
@@ -143,7 +154,7 @@ export interface Term {
 export interface Agent {
   id: string;
   name: string;
-  kind: "agent" | "human";
+  kind: "agent" | "human" | "auditor";
   scope: string;
   owns: string[];
   rules?: string[];
@@ -172,6 +183,8 @@ export interface CheckResult {
   check: string;
   description: string;
   principles: string[];
+  /** A project check's command; built-in checks have none. */
+  command?: string;
   status: "pass" | "fail" | "skipped";
   findings: Finding[];
 }
@@ -295,6 +308,7 @@ export type Kind =
   | "layer"
   | "technology"
   | "principle"
+  | "check"
   | "domain"
   | "term"
   | "agent"

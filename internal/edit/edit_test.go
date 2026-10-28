@@ -2,6 +2,7 @@ package edit
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/JuanVizcaya/fausto/internal/spec"
+	"gopkg.in/yaml.v3"
 )
 
 const repoRoot = "../../testdata/example"
@@ -316,5 +318,29 @@ func TestReorderKeepsUnnamedItemsInPlace(t *testing.T) {
 	want := "x: 1\nitems:\n  - id: c\n    n: 3\n\n  - id: b\n  # first\n  - id: a\n    n: 1\n\nafter: true\n"
 	if string(out) != want {
 		t.Errorf("got\n%s\nwant\n%s", out, want)
+	}
+}
+
+func TestFirstItemCreatesOptionalFile(t *testing.T) {
+	root := copyRepo(t)
+	if _, err := os.Stat(filepath.Join(root, "system/checks.yaml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the example already has checks.yaml: %v", err)
+	}
+	files, err := Apply(root, []Change{
+		{Kind: "check", Value: json.RawMessage(`{"id":"go-tests","title":"Go tests","run":"go test ./..."}`)},
+	}, "2026-10-28")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got spec.Checks
+	if err := yaml.Unmarshal(files["system/checks.yaml"], &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Checks) != 1 || got.Checks[0].ID != "go-tests" || got.Checks[0].Run != "go test ./..." {
+		t.Fatalf("checks.yaml = %q", files["system/checks.yaml"])
+	}
+	// Deleting from a file that doesn't exist is still an error.
+	if _, err := Apply(root, []Change{{Kind: "check", ID: "go-tests", Value: json.RawMessage("null")}}, "2026-10-28"); err == nil {
+		t.Fatal("deleting from a missing checks.yaml succeeded")
 	}
 }

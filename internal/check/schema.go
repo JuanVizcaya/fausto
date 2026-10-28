@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -104,6 +105,7 @@ func checkReferences(s *spec.Spec) []Finding {
 	ids(s.Principles.Principles, func(p spec.Principle) string { return p.ID }, func(id string) {
 		add("", spec.Dir+"/principles.yaml", "duplicate principle %q", id)
 	})
+	out = append(out, checkProjectChecks(s)...)
 	ids(s.Domains.Domains, func(d spec.Domain) string { return d.ID }, func(id string) {
 		add("", spec.Dir+"/domains.yaml", "duplicate domain %q", id)
 	})
@@ -140,8 +142,10 @@ func checkReferences(s *spec.Spec) []Finding {
 		if !layers[c.Layer] {
 			add(c.ID, systemFile, "unknown layer %q", c.Layer)
 		}
-		if _, ok := agents[c.Owner]; !ok && s.Charters != "" {
+		if a, ok := agents[c.Owner]; !ok && s.Charters != "" {
 			add(c.ID, systemFile, "owner %q is not an agent in %s/agents/", c.Owner, spec.Dir)
+		} else if ok && a.Kind == "auditor" {
+			add(c.ID, systemFile, "owner %q is an auditor, which owns nothing", c.Owner)
 		}
 		for _, t := range c.Tech {
 			if !tech[t] {
@@ -166,9 +170,38 @@ func checkReferences(s *spec.Spec) []Finding {
 				add(c.ID, systemFile, "sql dependency on %q, which is not a database", target.ID)
 			case d.Protocol == "library" && target.Kind != "library":
 				add(c.ID, systemFile, "library dependency on %q, which is not a library", target.ID)
-			case d.Protocol == "grpc" && len(target.Contracts) == 0:
-				add(c.ID, systemFile, "grpc dependency on %q, which declares no contracts", target.ID)
+			case d.Protocol == "grpc" && !slices.ContainsFunc(target.Contracts, func(ct spec.Contract) bool { return ct.Proto != "" }):
+				add(c.ID, systemFile, "grpc dependency on %q, which declares no protobuf contracts", target.ID)
+			case d.Protocol == "contract" && !slices.ContainsFunc(target.Contracts, func(ct spec.Contract) bool { return ct.Go != "" }):
+				add(c.ID, systemFile, "contract dependency on %q, which declares no Go contract", target.ID)
+			case d.Protocol == "contract" && c.Process() != target.Process():
+				add(c.ID, systemFile, "contract dependency on %q, which runs in another process; call it over grpc", target.ID)
+			case d.Schema != "" && d.Protocol != "sql":
+				add(c.ID, systemFile, "%s dependency on %q names a schema; only sql dependencies do", d.Protocol, target.ID)
 			}
+		}
+		if h := c.Runtime.Host; h != "" {
+			host := s.Component(h)
+			switch {
+			case host == nil:
+				add(c.ID, systemFile, "runtime.host is unknown component %q", h)
+			case host.ID == c.ID:
+				add(c.ID, systemFile, "runtime.host is the component itself")
+			case host.Runtime.Cmd == "":
+				add(c.ID, systemFile, "runtime.host %q declares no runtime.cmd to run in", h)
+			case host.Runtime.Host != "":
+				add(c.ID, systemFile, "runtime.host %q itself runs in %q; name that one", h, host.Runtime.Host)
+			default:
+				if l := s.Layer(host.Layer); l != nil && host.Layer != c.Layer && !slices.Contains(l.MayDependOn, c.Layer) {
+					add(c.ID, systemFile, "layer %q of host %q may not depend on layer %q", host.Layer, h, c.Layer)
+				}
+			}
+			if c.Runtime.Cmd != "" || c.Runtime.Compose != "" || c.Runtime.Image != "" {
+				add(c.ID, systemFile, "runs in %q, so it declares no runtime.cmd, runtime.compose or runtime.image of its own", h)
+			}
+		}
+		if c.Runtime.Image != "" && c.Runtime.Cmd != "" {
+			add(c.ID, systemFile, "declares both runtime.cmd and runtime.image; a component runs one or the other")
 		}
 	}
 	for _, d := range s.Domains.Domains {
@@ -207,6 +240,39 @@ func ids[T any](items []T, id func(T) string, dup func(string)) map[string]bool 
 		seen[k] = true
 	}
 	return seen
+}
+
+// Review is what a principle lists in its checks when people and reviewers,
+// not a command, enforce it.
+const Review = "review"
+
+// checkProjectChecks verifies checks.yaml, and that every check a principle
+// names is a built-in check, a project check, or review.
+func checkProjectChecks(s *spec.Spec) []Finding {
+	var out []Finding
+	const file = spec.Dir + "/checks.yaml"
+	project := ids(s.Checks.Checks, func(c spec.ProjectCheck) string { return c.ID }, func(id string) {
+		out = append(out, Finding{Message: fmt.Sprintf("duplicate check %q", id), Path: file})
+	})
+	for _, c := range s.Checks.Checks {
+		if slices.Contains(knownChecks, c.ID) || c.ID == Review {
+			out = append(out, Finding{Message: fmt.Sprintf("check %q has the name of a built-in check", c.ID), Path: file})
+		}
+		if d := path.Clean(c.Dir); c.Dir != "" && (path.IsAbs(d) || d == ".." || strings.HasPrefix(d, "../")) {
+			out = append(out, Finding{Message: fmt.Sprintf("check %q: dir %q must be inside the repository", c.ID, c.Dir), Path: file})
+		}
+	}
+	for _, p := range s.Principles.Principles {
+		for _, name := range p.Checks {
+			if !slices.Contains(knownChecks, name) && !project[name] && name != Review {
+				out = append(out, Finding{
+					Message: fmt.Sprintf("principle %q names unknown check %q (built-in: %s; project checks are declared in %s; or %s)", p.ID, name, strings.Join(knownChecks, ", "), file, Review),
+					Path:    spec.Dir + "/principles.yaml",
+				})
+			}
+		}
+	}
+	return out
 }
 
 // checkRoadmap verifies milestone references, that milestone dependencies
@@ -320,8 +386,8 @@ func checkRequirements(s *spec.Spec, components, layers map[string]bool) []Findi
 		}
 		name, rule, hasRule := strings.Cut(r.VerifiedBy, "/")
 		switch {
-		case !slices.Contains(knownChecks, name):
-			add("requirement %q is verified by unknown check %q (available: %s)", r.ID, name, strings.Join(knownChecks, ", "))
+		case !slices.Contains(knownChecks, name) && s.Checks.Check(name) == nil:
+			add("requirement %q is verified by unknown check %q (built-in: %s; or a project check in %s/checks.yaml)", r.ID, name, strings.Join(knownChecks, ", "), spec.Dir)
 		case hasRule && name != "runtime":
 			add("requirement %q: only the runtime check has rules", r.ID)
 		case name == "runtime" && !hasRule:

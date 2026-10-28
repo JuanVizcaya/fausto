@@ -1,96 +1,89 @@
 # Habbyte
 
-Apartment complex management. Go backend, with a React frontend planned.
+Condominium management for Mexico. Go backend, with a React frontend planned.
 
 ## System spec
 
-`system/` is the source of truth for the architecture: components and layers
-(`system.yaml`), implementation principles, the technology radar, domains,
-agent charters with file ownership, and decisions (ADRs).
+The architecture spec (components and layers, implementation principles, the
+technology radar, domains, roadmap, requirements, events, risks, the agents'
+charters, and decisions) lives in
+[fausto](https://github.com/JuanVizcaya/fausto), an external tool, not in
+this repository (ADR 0006). Read and change it in fausto's UI; fausto checks
+the code against it on every pull request, as `fausto/check`. `CLAUDE.md`
+says how agents get it.
 
-`fausto`, in `fausto/`, keeps the code in sync with the spec: `fausto check`
-verifies it (CI runs it on every pull request), `fausto serve` opens a web UI
-for browsing the spec and proposing changes to it, and `fausto agents`
-regenerates agent definitions from charters. See `fausto/README.md` for how
-to run it, and `CLAUDE.md` for how agents work with the spec.
+To leave fausto, `fausto spec export -root .` writes the spec to `system/`;
+commit it.
 
 ## Naming and layout
 
 - Repository/project: `habbyte`.
-- Go module: `github.com/CMOT/habyta/backend`.
-- Services: `api` (HTTP/JSON gateway for React), and the `residents` and
-  `administrators` domain services (gRPC).
-- Future domain services should use business names such as `properties`,
-  `billing`, and `maintenance` when their boundaries are defined.
+- Go module: `github.com/Ceferinto/habbyte/backend` (the current GitHub repository).
+- The backend is a modular monolith: one binary, `habbyte`, with 14 modules.
+  Each module can later become its own service without rewriting its domain
+  code (see the architecture design in fausto).
 
 ```text
-system/                          # Architecture spec: source of truth (see above)
-tasks/                           # Agent tasks created by accepted proposals
-fausto/                          # Supervising tool: `fausto check` drift checks
 compose.yaml
-buf.yaml, buf.gen.yaml           # Protobuf lint/breaking rules and code generation
-proto/habbyte/<domain>/v1/        # Versioned gRPC contracts
+buf.yaml, buf.gen.yaml              # Protobuf lint/breaking rules and code generation
+proto/habbyte/<module>/events/v1/   # Event messages; the envelope is in platform/events/v1
 backend/
-  Dockerfile                     # Builds any service: --build-arg SERVICE=<name>
-  cmd/<service>/                 # Entry points: service.Main(name, register)
-  gen/                           # Generated Go code (committed; do not edit)
-  internal/api/                  # Gateway HTTP handlers calling gRPC services
-  internal/residents/            # residents gRPC service, Postgres store, migrations
-  internal/administrators/       # administrators gRPC service, Postgres store, migrations
-  internal/platform/server/      # HTTP/gRPC transports, middleware, health, shutdown
-  internal/platform/service/     # Process setup, env config, healthcheck subcommand
-  internal/platform/grpcclient/  # Service-to-service clients (round robin, request IDs)
-  internal/platform/requestid/   # Request ID propagation across HTTP and gRPC
-  internal/platform/postgres/    # Connection pools and embedded goose migrations
-deploy/compose/<service>.yaml    # Compose services kept by their owning agent, included from compose.yaml
-deploy/postgres/                 # Database init scripts for local Compose
+  Dockerfile                        # Builds a command: --build-arg SERVICE=<name> (default habbyte)
+  cmd/habbyte/                      # MVP binary: registers every module, mounts the API
+  gen/                              # Generated Go code (committed; do not edit)
+  internal/edge/api/                # Public HTTP/JSON API under /v1
+  internal/modules/<module>/
+    module.go                       # Registers the module's contract with the Registry
+    contract/                       # Public Go interface: the only package other modules import
+    service/                        # Implements the contract
+    domain/                         # Entities and rules, no I/O
+    store/                          # Store interface and its Postgres implementation
+    migrations/                     # goose SQL files for the module's schema
+    adapters/<provider>/            # Provider integrations, where the module has them
+  internal/platform/app/            # Process setup, env config, healthcheck subcommand
+  internal/platform/httpserver/     # HTTP transport, middleware, health, shutdown
+  internal/platform/module/         # Module interface and Registry
+  internal/platform/postgres/       # Connection pools and goose migrations
+  internal/platform/requestid/      # Request IDs in contexts and headers
+  internal/archtest/                # Module boundary checks, run with go test
+deploy/caddy/Caddyfile              # Edge proxy: TLS, api. to the backend, auth. to Keycloak
+deploy/postgres/init.sh             # Creates the habbyte, habbyte_test and keycloak databases
 ```
 
-Each service's `main` calls `service.Main(name, register)`; `register` adds HTTP
-routes with `Server.Handle` and gRPC services with generated
-`Register<Name>Server(s, impl)` functions, since `*server.Server` is a
-`grpc.ServiceRegistrar`.
+The modules: `iam`, `developments`, `control` (the core); `finance`,
+`payments`, `invoicing`, `community`, `amenities`, `operations`,
+`accesscontrol`, `devices` (products); `notifications`, `files`, `audit`
+(shared capabilities).
 
-React calls HTTP/JSON endpoints on `api`, which translates them into gRPC calls
-to domain services. Browser JSON types are hand-written in the gateway so the
-public API can evolve independently of internal contracts. Domain services are
-reachable only on the Compose network. Every request carries an `X-Request-ID`
-that is forwarded as `x-request-id` gRPC metadata and logged by each service.
+### Module boundaries
+
+A module imports `internal/platform`, other modules' `contract` packages, and
+its own packages, nothing else. A contract never imports its module's other
+packages, and the edge reaches modules only through contracts.
+`internal/archtest` enforces this in `go test`, and also checks that every
+module has `module.go`, `contract`, `service`, `domain`, `store` and
+`migrations`. `cmd/habbyte` tests that every folder under `internal/modules`
+is wired into the binary.
+
+To add a module, copy an existing one, rename the package and `Name`, and add
+`<module>.New()` to `modules()` in `cmd/habbyte/main.go`.
 
 ### Data
 
-Each service owns its database; services never read another service's tables.
-`residents` uses Postgres 18 (`residents-db` in Compose) through `DATABASE_URL`.
-On startup it waits up to 30 seconds for the database, then applies the SQL
-migrations embedded from `internal/residents/migrations` with goose. A Postgres
-advisory lock lets several replicas start at once safely. Readiness (`/readyz`
-and gRPC health) fails while the database is unreachable; liveness does not.
+One Postgres 18 container holds the `habbyte` database, with one schema per
+module, and the `keycloak` database. A module never reads another module's
+schema. Schemas, per-module roles and row-level security arrive with the M0
+platform work.
 
-Persistence sits behind the `store` interface in `internal/residents/store.go`,
-so changing databases only means adding another implementation. Add schema
-changes as new numbered files in the migrations directory; never edit one that
-has been applied.
-
-`administrators` works the same way with its own Postgres 18 database
-(`administrators-db`, defined in `deploy/compose/administrators.yaml`), its
-migrations in `internal/administrators/migrations`, and its `store` interface
-in `internal/administrators/store.go`.
-
-Local data lives in the `residents-db` and `administrators-db` volumes.
-`docker compose down -v` deletes them. The database passwords default to
-`residents` and `administrators`; set `RESIDENTS_DB_PASSWORD` and
-`ADMINISTRATORS_DB_PASSWORD` in `.env` to change them before the volumes are
-first created.
+Local data lives in the `postgres` volume, and `docker compose down -v` deletes
+it. Passwords default to the values in `.env.example`; set them in `.env`
+before the volume is first created.
 
 ### API
 
-All IDs are UUIDs. Errors are `{"error": {"code", "message", "requestId"}}`.
-
-| Method | Path | Notes |
-| --- | --- | --- |
-| `POST` | `/v1/tenants/{tenantId}/residents` | Body: `unitId`, `fullName`, `email`, optional `phone`, `keycloakSub` |
-| `GET` | `/v1/tenants/{tenantId}/residents/{id}` | |
-| `GET` | `/v1/tenants/{tenantId}/residents` | Query: `unitId`, `pageSize` (≤200), `pageToken` |
+Errors are `{"error": {"code", "message", "requestId", "details"}}`. No
+endpoints exist yet beyond `/healthz` and `/readyz`; unknown `/v1` paths answer
+404 in that format.
 
 ### Protobuf
 
@@ -104,12 +97,9 @@ docker run --rm -v "$PWD":/workspace -w /workspace bufbuild/buf:1.73.0 generate
 Commit the regenerated `backend/gen` with the proto change. Never change the
 meaning of an existing field number; add a new `v2` package for breaking changes.
 
-Events follow the same rules. Declare each event in `system/events.yaml` with
-its producer, consumers, and message, such as
-`habbyte.residents.events.v1.ResidentRegistered`. Before an event goes active,
-add its package (`proto/habbyte/residents/events/v1`) to the producer's
-`contracts` in `system/system.yaml`; consumers may import the generated code
-only for events they consume.
+Events are wrapped in `habbyte.platform.events.v1.Envelope`. Declare each event
+in `system/events.yaml` with its producer, consumers, and message, such as
+`habbyte.developments.events.v1.OccupancyEnded`.
 
 ## Run with Docker
 
@@ -117,27 +107,38 @@ Requires Docker with the Compose plugin; a host Go installation is optional.
 
 ```sh
 docker compose up --build -d --wait
-curl http://localhost:8080/healthz
-curl http://localhost:8080/readyz
-docker compose logs -f api residents administrators
-```
-
-Both endpoints return JSON. `/healthz` reports process liveness; `/readyz` reports
-whether the service accepts work. The container healthcheck tests both HTTP
-readiness and the standard gRPC health RPC. Readiness will need to include
-critical dependencies when those are added.
-
-```sh
+docker compose logs -f backend caddy
 docker compose down
 ```
 
-HTTP is published on localhost only. To change the host port, copy `.env.example`
-to `.env` and set `HTTP_PORT`. Services reach each other over gRPC on the
-Compose network, for example `residents:9090`; gRPC ports are not published to
-the host. The gateway resolves `RESIDENTS_ADDR` (default
-`dns:///residents:9090`) and balances calls across replicas
-(`docker compose up --scale residents=2`). The local setup uses plaintext gRPC. Configure transport security and service authentication
-before deployment across untrusted networks.
+Caddy (`deploy/caddy/Caddyfile`) is the only published service, on ports 80
+and 443. It terminates TLS and routes by host:
+
+| Host | Goes to | Notes |
+| --- | --- | --- |
+| `https://api.localhost` | `backend:8080` | `/healthz`, `/readyz`, `/v1/...` |
+| `https://auth.localhost` | `keycloak:8080` | Sign-in and OIDC; `/admin`, `/metrics` and `/health` answer 404 |
+| `http://localhost:9000/admin` | Keycloak directly | Admin console, loopback only (`admin` / `admin_password`) |
+
+`*.localhost` resolves to 127.0.0.1 with no `/etc/hosts` changes. Caddy issues
+those certificates from its own local CA; copy its root to trust it:
+
+```sh
+docker compose cp caddy:/data/caddy/pki/authorities/local/root.crt ./caddy-root.crt
+curl --cacert caddy-root.crt https://api.localhost/healthz
+# Browsers on macOS:
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain caddy-root.crt
+```
+
+The root is kept in the `caddy-data` volume, so this is needed once per
+volume. In production, `API_HOST` and `AUTH_HOST` are real domains and Caddy
+gets Let's Encrypt certificates for them; set `ACME_EMAIL` there. Keycloak's
+issuer follows `AUTH_HOST` (`KC_HOSTNAME`).
+
+The backend is not published. `/healthz` reports process liveness, and
+`/readyz` reports whether the backend accepts work; Caddy also uses `/readyz`
+for its health checks. To reach the backend without Caddy, add a port in a
+`compose.override.yaml`.
 
 ## Development and verification
 
@@ -145,42 +146,30 @@ The Docker builder uses Go 1.27.1 and the module requires Go 1.27 or newer.
 The runtime is a minimal image with a static binary and CA certificates, runs
 as a non-root numeric user, and uses a read-only filesystem in Compose.
 
-Run static analysis and tests, including the race detector, inside Docker.
-The build target uses an in-memory store; the Compose `test` profile also runs
-the Postgres integration tests, each service against its own test database
-(`residents_test`, `administrators_test`):
+Run static analysis and tests, including the race detector and the Postgres
+integration tests (against `habbyte_test`), inside Docker:
 
 ```sh
-docker build --target test -t habbyte-test ./backend
-docker compose --profile test run --rm --build test                   # residents
-docker compose --profile test run --rm --build administrators-test    # administrators
+docker compose --profile test run --rm --build test
 ```
 
 With Go installed locally:
 
 ```sh
 cd backend
-go run ./cmd/api
+go run ./cmd/habbyte
 go vet ./...
 go test -race ./...
 # With a reachable Postgres, also run the integration tests:
-TEST_DATABASE_URL=postgres://... go test -race ./...                 # residents
-ADMINISTRATORS_TEST_DATABASE_URL=postgres://... go test -race ./...  # administrators
+TEST_DATABASE_URL=postgres://... go test -race ./...
 ```
 
-The service accepts `HTTP_ADDR` (default `:8080`), `GRPC_ADDR` (default
-`:9090`), and `SHUTDOWN_TIMEOUT` (default `10s`). It logs JSON to stdout and
-drains HTTP and gRPC requests on SIGINT or SIGTERM, allowing up to
-`SHUTDOWN_TIMEOUT` before forcing shutdown. Compose allows 15 seconds before
-killing the container, so keep `SHUTDOWN_TIMEOUT` below that.
+The backend accepts `HTTP_ADDR` (default `:8080`) and `SHUTDOWN_TIMEOUT`
+(default `10s`). It logs JSON to stdout and drains requests on SIGINT or
+SIGTERM, allowing up to `SHUTDOWN_TIMEOUT` before forcing shutdown. Compose
+allows 15 seconds before killing the container, so keep `SHUTDOWN_TIMEOUT`
+below that.
 
 HTTP requests get an `X-Request-ID` (an incoming valid one is kept), an access
-log line, panic recovery, and a 1 MiB default body limit. gRPC calls get panic
-recovery, logging, and keepalive limits; connections are recycled every five
-minutes so clients rebalance across replicas. Time zone data is embedded in the
-binary because the runtime image has no zoneinfo.
-
-Add future services with their own entry points, container images, and Compose
-entries. Keep domain logic within its owning service and avoid cross-service
-database access. Separate Go modules can be introduced if release ownership
-requires them; one backend module keeps this initial scaffold simple.
+log line, panic recovery, and a 1 MiB default body limit. Time zone data is
+embedded in the binary because the runtime image has no zoneinfo.

@@ -2355,3 +2355,12 @@ pre.source.sig {
   font-size: 12px;
   white-space: pre;
 }
+.findings .output {
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  margin: 6px 0 0;
+  max-height: 320px;
+  overflow: auto;
+}

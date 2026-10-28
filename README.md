@@ -9,8 +9,9 @@ and hands the resulting work to agents as tasks.
 
 Fausto is a separate tool: a project doesn't depend on it to build or run,
 and fausto works on a project only through its repository. It was first
-built for [Habbyte](https://github.com/CMOT/habyta); `testdata/example` is a
-snapshot of that project, used by the tests.
+built for [Habbyte](https://github.com/Ceferinto/habbyte); `testdata/example` is a
+snapshot of that project, a modular monolith, used by the tests, and
+`testdata/services` an earlier one, as separate gRPC services.
 
 Module `github.com/JuanVizcaya/fausto`, Go 1.27. Install the CLI, then run it
 from anywhere inside a project's clone (it finds the nearest parent
@@ -56,6 +57,63 @@ proto_root: api/proto
 ```
 
 or passes `-commands-dir`, `-compose-file` and `-proto-root`.
+
+### Project checks
+
+A project's own rules are often enforced by its own tests and linters. It
+declares those commands in `system/checks.yaml`, and its principles name them
+next to the built-in checks, or name `review` when people enforce them:
+
+```yaml
+# system/checks.yaml
+checks:
+  - id: module-boundaries
+    title: Module boundaries hold (internal/archtest).
+    run: go test ./internal/archtest/
+    dir: backend        # relative to the repository root; default: the root
+    timeout: 5m         # default: 10m
+
+# system/principles.yaml
+principles:
+  - id: contracts-only
+    title: Modules meet only through contracts
+    rationale: ...
+    checks: [layers, module-boundaries]
+```
+
+A command is the project's code, so `fausto check` runs it only with
+`-commands`: in CI, and in an agent's clone (the `fausto_check` tool's
+`commands` argument). Without it, and always on fausto's server (the web UI
+and `fausto/check` on pull requests), project checks are listed as skipped.
+A failed command's finding keeps the end of its output; with `-commands`, the
+whole output also goes to stderr.
+
+### A modular monolith
+
+A component can run inside another one's process, as a module does in a
+modular monolith's binary:
+
+```yaml
+- id: payments
+  kind: service
+  layer: modules
+  paths: [backend/internal/modules/payments]   # the first path is its package
+  runtime: {host: habbyte}                     # no cmd or compose of its own
+  contracts:
+    - go: backend/internal/modules/payments/contract
+  depends_on:
+    - {target: files, protocol: contract}      # an in-process call through files' Go contract
+    - {target: postgres, protocol: sql, schema: payments}
+```
+
+The host's command must import each active module's package; other
+components may import only its `go` contract, with a `contract` dependency,
+which works only within one process. On a database server that several
+components share, each sql dependency names the `schema` it owns, and each
+schema has one owner. A component run from an upstream image, such as a
+proxy, declares `runtime.image` (`caddy`, or `quay.io/keycloak/keycloak`),
+and its Compose service must run that image. Ports bound to loopback don't
+count as published.
 
 ### In a project's CI
 
@@ -326,6 +384,25 @@ fine-grained token on that repository with commit statuses and pull requests
 (read and write) and contents (read). For a spec in the repository, use the
 check workflow instead (see [In a project's CI](#in-a-projects-ci)).
 
+### Handing pull requests to the project's workflows
+
+fausto's server never runs a pull request's code, so project checks, and
+reviewers that read the code against the spec, run in the project's CI. That
+CI can't read fausto's database either, so with `FAUSTO_PR_HANDOFF=true`,
+before reporting on a pull request fausto also:
+
+1. publishes the spec revision it checked against as a hidden ref,
+   `refs/fausto/spec/r<N>`: a commit holding only `system/`, never a branch
+   and never merged, the same commit every time for the same revision;
+2. sends a `repository_dispatch` event, `fausto-spec`, with
+   `{pr, head_sha, revision, spec_ref}`.
+
+A workflow on that event checks out `head_sha`, fetches the ref into
+`system/`, and reports its own commit status (see the check workflow's
+`spec-ref` input). The token also needs contents (read and write). If the
+hand-off fails, fausto reports nothing and tries the pull request again on
+the next poll.
+
 ## Running agents
 
 Each agent charter of kind `agent` has a generated Claude Code agent
@@ -334,6 +411,28 @@ components, rules, the principles, and how to work its tasks. For charters
 in the repository, proposals regenerate them when charters change, and the
 `agents` check fails when they are stale; don't edit them. For charters
 fausto keeps, the definitions aren't part of the project: fausto serves them.
+
+### An auditor
+
+A charter of kind `auditor` owns no paths and no components: it reviews.
+Its generated definition lists the principles marked `review` (or with no
+checks) in full, the others with the checks that cover them, and has it
+review a diff against them, the accepted decisions, charter ownership, and
+the declared components, events and risks. Each finding cites the rule it
+breaks and is marked blocking or advisory; it never changes files.
+
+```yaml
+# system/agents/auditor.yaml
+id: auditor
+name: Auditor
+kind: auditor
+scope: Reviews every pull request against the spec before people do.
+```
+
+`fausto agents -print auditor` writes the definition to stdout, so a pull
+request's workflow can hand it to Claude Code as the reviewer's prompt; with
+`-spec-from`, it reads the handed-off spec ref (see
+[Handing pull requests to the project's workflows](#handing-pull-requests-to-the-projects-workflows)).
 
 To work an agent's open tasks, start it from your clone:
 

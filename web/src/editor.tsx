@@ -46,6 +46,10 @@ export function currentValue(spec: Spec, kind: Kind, id: string): { value: Recor
       const p = spec.principles.principles.find((x) => x.id === id);
       return p ? { value: { ...p } } : null;
     }
+    case "check": {
+      const c = spec.checks.checks?.find((x) => x.id === id);
+      return c ? { value: { ...c } } : null;
+    }
     case "domain": {
       const d = spec.domains.domains.find((x) => x.id === id);
       return d ? { value: { ...d } } : null;

@@ -10,8 +10,9 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     go vet ./... && go test -race -count=1 ./...
 
 FROM development AS build
-# SERVICE selects the command under cmd/ to build.
-ARG SERVICE=api
+# SERVICE selects the command under cmd/ to build: habbyte, or an extracted
+# module later.
+ARG SERVICE=habbyte
 ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
@@ -21,5 +22,5 @@ FROM scratch AS runtime
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/service /service
 USER 65532:65532
-EXPOSE 8080 9090
+EXPOSE 8080
 ENTRYPOINT ["/service"]

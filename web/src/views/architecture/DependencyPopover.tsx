@@ -2,7 +2,7 @@ import type { Component, Dependency, Spec } from "../../types";
 import { Code } from "../../ui";
 
 export type Protocol = Dependency["protocol"];
-export const protocols: Protocol[] = ["grpc", "http", "sql", "library"];
+export const protocols: Protocol[] = ["grpc", "contract", "http", "sql", "library"];
 
 /** The protocol a new dependency on target most likely uses. */
 export function suggestProtocol(target: Component): Protocol {
@@ -12,7 +12,7 @@ export function suggestProtocol(target: Component): Protocol {
     case "library":
       return "library";
     case "service":
-      return "grpc";
+      return target.contracts?.some((ct) => ct.go) ? "contract" : "grpc";
     default:
       return "http";
   }
@@ -21,7 +21,7 @@ export function suggestProtocol(target: Component): Protocol {
 /** Why the layer rules forbid from depending on to, or "" if they allow it. */
 export function layerProblem(spec: Spec, from: Component, to: Component, protocol: Protocol): string {
   if (from.layer === to.layer) {
-    return protocol === "library" ? "" : `Within the ${from.layer} layer, only library dependencies are allowed.`;
+    return protocol === "library" || protocol === "contract" ? "" : `Within the ${from.layer} layer, only library and contract dependencies are allowed.`;
   }
   const allowed = spec.system.layers.find((l) => l.id === from.layer)?.may_depend_on ?? [];
   return allowed.includes(to.layer) ? "" : `The ${from.layer} layer may not depend on the ${to.layer} layer; the layers check will fail.`;

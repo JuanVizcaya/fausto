@@ -30,7 +30,9 @@ fast-start version.
 - `internal/spec` — parses all of a project's `system/` into typed Go structs
 - `internal/schema` — the embedded JSON Schemas for the spec files
 - `internal/check` — the 8 drift checks (`schema`, `services`, `layers`,
-  `db-ownership`, `contracts`, `ownership`, `runtime`, `agents`)
+  `db-ownership`, `contracts`, `ownership`, `runtime`, `agents`), and the
+  project checks of `system/checks.yaml` (commands, run only with
+  `-commands`, never on the server; `project.go`)
 - `internal/code` — read-only Go/proto analysis (`go/parser`, no
   compilation) powering the Architecture drill-down views
 - `internal/edit` — applies structured, diff-minimizing edits to spec YAML
@@ -42,13 +44,16 @@ fast-start version.
   to applied or withdrawn once merged or closed, reject;
   `specfiles.go` lays the spec fausto keeps (as revisions) over `system/`
 - `internal/prcheck` — checks pull requests against the spec fausto keeps
-  and reports on GitHub; `internal/github` is the API client it shares
+  and reports on GitHub; with `FAUSTO_PR_HANDOFF`, also publishes the spec
+  as `refs/fausto/spec/r<N>` and dispatches `fausto-spec` for the project's
+  workflows (`handoff.go`); `internal/github` is the API client it shares
   with `internal/source`
 - `internal/source` — a project's repository: a local clone, or GitHub
   (fausto's own clone, branches pushed and pull requests opened with
   `FAUSTO_GITHUB_TOKEN`)
 - `internal/agentdef` — agent definitions (as files, or the description and
-  prompt `claude --agents` takes) and `.github/CODEOWNERS` from charters
+  prompt `claude --agents` takes) and `.github/CODEOWNERS` from charters;
+  an `auditor` charter's definition reviews instead (`auditor.go`)
 - `internal/client` — the agent side of fausto's API, and a clone's
   connection in `.fausto/config.json`
 - `internal/mcp` — `fausto mcp`, the stdio MCP server agents use

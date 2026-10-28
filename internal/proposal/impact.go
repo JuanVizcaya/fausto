@@ -66,6 +66,9 @@ func items(s *spec.Spec) map[string]map[string]item {
 	for _, p := range s.Principles.Principles {
 		add("principle", p.ID, p.Title, p, nil)
 	}
+	for _, c := range s.Checks.Checks {
+		add("check", c.ID, c.Title, c, nil)
+	}
 	for _, d := range s.Domains.Domains {
 		add("domain", d.ID, d.Name, d, nil)
 	}
@@ -93,7 +96,7 @@ func items(s *spec.Spec) map[string]map[string]item {
 	return out
 }
 
-var kindOrder = []string{"milestone", "risk", "layer", "component", "event", "requirement", "technology", "principle", "domain", "term", "agent", "decision"}
+var kindOrder = []string{"milestone", "risk", "layer", "component", "event", "requirement", "technology", "principle", "check", "domain", "term", "agent", "decision"}
 
 // DiffSpecs lists the items that differ between before and after.
 func DiffSpecs(before, after *spec.Spec) []ItemChange {
@@ -236,7 +239,7 @@ func PlanTasks(proposalID string, changes []ItemChange, before, after *spec.Spec
 			for _, id := range componentsWhere(func(c spec.Component) bool { return contains(c.Tech, ch.ID) }) {
 				touch(id, line)
 			}
-		case "principle":
+		case "principle", "check":
 			everyone(line)
 		case "domain":
 			for _, s := range specs {

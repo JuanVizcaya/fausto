@@ -115,8 +115,10 @@ func build(repo *check.Repo) (*index, error) {
 				imports:   map[string]bool{},
 			}
 			for _, ct := range c.Contracts {
-				if ct.Generated != "" && (dir == ct.Generated || strings.HasPrefix(dir, ct.Generated+"/")) {
-					p.contract = true
+				for _, d := range []string{ct.Generated, ct.Go} {
+					if d != "" && (dir == d || strings.HasPrefix(dir, d+"/")) {
+						p.contract = true
+					}
 				}
 			}
 			ix.pkgs[dir] = p

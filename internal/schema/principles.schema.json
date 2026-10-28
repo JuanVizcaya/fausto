@@ -18,7 +18,8 @@
           "rationale": {"type": "string"},
           "checks": {
             "type": "array",
-            "items": {"enum": ["schema", "services", "layers", "db-ownership", "contracts", "ownership", "runtime", "agents"]}
+            "description": "What enforces the principle: fausto's built-in checks (schema, services, layers, db-ownership, contracts, ownership, runtime, agents), the ids of project checks in checks.yaml, or review for a principle that people and reviewers enforce.",
+            "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}
           }
         }
       }

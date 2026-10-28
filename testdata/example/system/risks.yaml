@@ -1,82 +1,135 @@
 # Risk register. Severity is likelihood × impact (low 1, medium 2, high 3);
 # risks of severity 6 or more need a mitigation unless closed.
 risks:
-  - id: unauthenticated-api
-    title: The public API has no authentication
-    description: Anyone who can reach the gateway can read and create residents for any tenant, because the tenant comes from the URL path and requests are not authenticated.
-    category: security
+  - id: scope-too-large
+    title: The MVP scope is too large for the team
+    description: Seven products plus physical access, online payments and CFDI is a lot for three people, even with agents, and the pilot could slip.
+    category: delivery
     likelihood: high
-    impact: high
+    impact: medium
     status: open
-    owner: gateway
-    mitigation: Keep the gateway bound to localhost. Keycloak token validation, with the tenant taken from the token, is an exit criterion of Public API v1.
-    components: [api]
-    milestones: [public-api-v1]
-    requirements: [tenant-isolation]
+    owner: orchestrator
+    mitigation: Run parallel tracks after M1, and pilot with manual payment evidence before online payments if needed.
+    milestones: [m7-pilot]
 
-  - id: no-backups
-    title: Residents data is not backed up
-    description: Losing the residents-db volume loses every resident. There is no backup job and no tested restore.
+  - id: access-vendors-vary
+    title: Physical access vendors vary widely
+    description: Vendor APIs differ, and some offer only on-site controllers, so M3 could slip and integrations be fragile.
+    category: technical
+    likelihood: high
+    impact: medium
+    status: open
+    owner: access
+    mitigation: Pick one or two vendors for the pilot, run a spike during M0, and design the devices port with an on-site agent as a fallback.
+    components: [devices, accesscontrol]
+    milestones: [m3-access]
+
+  - id: single-host
+    title: The single host fails
+    description: Everything runs on one instance, so losing it is a full outage until recovery.
+    category: operational
+    likelihood: low
+    impact: high
+    status: accepted
+    owner: platform
+    mitigation: EC2 auto-recovery, and a rebuild from Terraform and backups within 4 hours. Move to managed, redundant hosting once customers pay.
+    components: [habbyte, postgres, keycloak]
+    requirements: [availability, backups]
+
+  - id: postgres-data-loss
+    title: Postgres in a container loses data
+    description: The databases live in a container volume; losing it without a tested backup loses financial records.
     category: operational
     likelihood: medium
     impact: high
     status: open
     owner: platform
-    mitigation: Add a scheduled pg_dump with off-host storage and run a restore drill before any production data is stored.
-    components: [residents-db]
+    mitigation: WAL-G point-in-time recovery to S3, daily snapshots, monthly restore drills, and RDS before the pilot stores real money.
+    components: [postgres]
+    milestones: [m0-foundations]
     requirements: [backups]
+    decisions: ["0001"]
 
-  - id: no-remote
-    title: The repository exists on one machine only
-    description: The repository has no remote, so a lost or broken laptop loses all work, and teammates cannot share proposals and tasks.
-    category: delivery
+  - id: webview-login-blocked
+    title: Google or Facebook login is blocked in webviews
+    description: Google refuses OAuth inside embedded webviews and Facebook restricts it, so users couldn't sign in on mobile.
+    category: technical
+    likelihood: high
+    impact: high
+    status: mitigating
+    owner: platform
+    mitigation: Sign in through the system browser and hand the session to the webview with a one-time code, tested in M0.
+    components: [api, keycloak]
+    milestones: [m0-foundations]
+
+  - id: cross-development-leak
+    title: Data leaks between developments
+    description: A query that ignores the development would show one condominium's data to another, with loss of trust and legal exposure.
+    category: security
     likelihood: medium
     impact: high
     status: open
-    owner: orchestrator
-    mitigation: Add a GitHub remote and push main; then let CI run the fausto checks on pull requests.
+    owner: core
+    mitigation: Application grant checks plus Postgres row-level security, and isolation tests in CI.
+    milestones: [m0-foundations]
+    requirements: [tenant-isolation]
 
-  - id: properties-critical-path
-    title: Properties MVP blocks three milestones
-    description: Billing, maintenance, and full residents support all need units from the properties service, which does not exist yet.
-    category: delivery
-    likelihood: medium
-    impact: medium
+  - id: csd-custody
+    title: Custody of fiscal certificates
+    description: A leaked CSD lets someone issue fraudulent invoices in a development's name.
+    category: security
+    likelihood: low
+    impact: high
     status: open
-    owner: orchestrator
-    mitigation: Start Properties MVP next and keep its scope to complexes, buildings, and units.
-    milestones: [properties-mvp, billing-mvp, maintenance-mvp]
+    owner: finance
+    mitigation: Prefer a PAC that keeps certificates for many issuers; otherwise encrypt them with KMS. Audit every use.
+    components: [invoicing]
+    milestones: [m4-payments]
 
-  - id: datastore-may-change
-    title: Postgres may not be the long-term datastore
-    description: The database choice is provisional, so storage code could need rewriting.
-    category: technical
+  - id: payment-aggregator
+    title: Handling residents' money
+    description: Holding residents' payments would make Habbyte a payment aggregator, with regulatory exposure.
+    category: compliance
+    likelihood: low
+    impact: high
+    status: open
+    owner: finance
+    mitigation: Payments go to each development's own Mercado Pago account, connected through OAuth.
+    components: [payments]
+    milestones: [m4-payments]
+
+  - id: biometric-data
+    title: Biometric data is sensitive personal data
+    description: Biometrics are sensitive data under the LFPDPPP; storing templates, or enrolling without consent, is a legal exposure.
+    category: compliance
+    likelihood: low
+    impact: high
+    status: open
+    owner: access
+    mitigation: Templates stay on devices or with the vendor, and express consent is recorded before enrollment.
+    components: [accesscontrol]
+    requirements: [pii-declared]
+
+  - id: keycloak-memory
+    title: Keycloak's memory and upkeep
+    description: Keycloak needs about 1.5 GB and regular upgrades, which could force a bigger host.
+    category: operational
     likelihood: medium
     impact: low
     status: accepted
-    owner: residents
-    mitigation: Persistence sits behind store interfaces, so a change means a new store implementation.
-    components: [residents, residents-db]
-    decisions: ["0001"]
+    owner: platform
+    mitigation: An 8 GB host with a tuned heap; Zitadel is the fallback.
+    components: [keycloak]
+    requirements: [resource-limits]
 
-  - id: shared-workflow-db-open
-    title: Anyone with the workflow database's URI can change proposals and tasks
-    description: fausto has no login; whoever holds FAUSTO_MONGO_URI (in developers' and agents' .env files) can create, accept, or reject proposals' records and change any task's status directly in the database.
+  - id: keycloak-not-hardened
+    title: Keycloak runs without container hardening
+    description: The keycloak container has a writable root filesystem and keeps its Linux capabilities, unlike the backend and Caddy, so a compromise there has more room.
     category: security
     likelihood: low
     impact: medium
-    status: accepted
-    owner: tooling
-    mitigation: Bind the database to localhost or a private network, give it a password kept only in .env files, and never commit .env.
-    decisions: ["0004"]
-
-  - id: workflow-db-loss
-    title: Losing the workflow database loses proposals and task history
-    description: Proposals, tasks, and who changed their status live only in MongoDB. Losing its volume loses them; the spec changes themselves stay in git, and Jira keeps a copy of each task's .md.
-    category: operational
-    likelihood: low
-    impact: high
     status: open
-    owner: tooling
-    mitigation: Back up the fausto-mongo volume (mongodump) on a schedule, or use a hosted MongoDB with backups.
-    decisions: ["0004"]
+    owner: platform
+    mitigation: Only Caddy reaches it, and its admin console listens only on loopback. Drop capabilities and add no-new-privileges, then try a read-only filesystem with a tmpfs for its data.
+    components: [keycloak]
+    requirements: [least-privilege]

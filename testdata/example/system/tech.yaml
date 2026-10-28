@@ -5,39 +5,54 @@ technologies:
     name: Go
     category: language
     status: adopt
-    notes: All backend services and shared libraries.
-  - id: grpc
-    name: gRPC + Protocol Buffers
-    category: protocol
-    status: adopt
-    notes: Service-to-service calls. Contracts live in proto/ and are linted with buf.
+    notes: The backend binary, its modules, and the service platform.
   - id: http-json
     name: HTTP/JSON
     category: protocol
     status: adopt
-    notes: Public API at the gateway only; browser types are hand-written.
+    notes: The public API under /v1, with hand-written types; OpenAPI is planned as its source of truth.
+  - id: protobuf
+    name: Protocol Buffers
+    category: protocol
+    status: adopt
+    notes: Event messages in proto/habbyte/<module>/events/v1, linted and checked for breaking changes with buf.
+  - id: grpc
+    name: gRPC
+    category: protocol
+    status: assess
+    notes: How a module's contract is called once the module is extracted into its own service.
   - id: postgres
     name: PostgreSQL 18
     category: datastore
-    status: trial
-    notes: Chosen for now; always behind a store interface (see ADR 0001).
+    status: adopt
+    notes: One server, one schema per module, behind store interfaces (ADR 0001). RDS is the first upgrade.
   - id: goose
     name: goose
     category: library
     status: adopt
-    notes: Embedded SQL migrations applied on service startup.
-  - id: react
-    name: React
-    category: framework
+    notes: Numbered SQL migrations per module, applied at startup.
+  - id: river
+    name: River
+    category: library
     status: assess
-    notes: Planned frontend.
+    notes: Postgres-backed job queue for outbox delivery and scheduled work.
+  - id: caddy
+    name: Caddy
+    category: infrastructure
+    status: adopt
+    notes: The edge proxy, with automatic TLS.
+  - id: keycloak
+    name: Keycloak
+    category: infrastructure
+    status: adopt
+    notes: Sign-in only, with Google and Facebook; roles and permissions are iam's.
   - id: docker-compose
     name: Docker Compose
     category: infrastructure
     status: adopt
-    notes: Local runtime and integration tests.
-  - id: keycloak
-    name: Keycloak
-    category: infrastructure
+    notes: The runtime locally, in staging and in production, and the integration tests.
+  - id: react
+    name: React
+    category: framework
     status: assess
-    notes: Planned identity provider; residents already store keycloakSub.
+    notes: The planned web app, also loaded by the native shells.

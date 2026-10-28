@@ -50,6 +50,7 @@ var collections = map[string]collection{
 	"layer":       {spec.Dir + "/system.yaml", "layers", "id"},
 	"technology":  {spec.Dir + "/tech.yaml", "technologies", "id"},
 	"principle":   {spec.Dir + "/principles.yaml", "principles", "id"},
+	"check":       {spec.Dir + "/checks.yaml", "checks", "id"},
 	"domain":      {spec.Dir + "/domains.yaml", "domains", "id"},
 	"term":        {spec.Dir + "/domains.yaml", "glossary", "term"},
 	"milestone":   {spec.Dir + "/roadmap.yaml", "milestones", "id"},
@@ -116,6 +117,14 @@ func apply(root string, read func(string) ([]byte, error), out Files, c Change, 
 	}
 	if col, ok := collections[c.Kind]; ok {
 		data, err := read(col.file)
+		if errors.Is(err, os.ErrNotExist) && value != nil && c.ID == "" {
+			// An optional file, such as checks.yaml, starts with its first item.
+			out[col.file], err = encode(&yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: col.key},
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{value}},
+			}})
+			return err
+		}
 		if err != nil {
 			return err
 		}

@@ -1,0 +1,44 @@
+name: habbyte
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Go tests, with the Postgres integration tests
+        run: docker compose --profile test run --rm --build test
+      - name: Stop the test database
+        if: always()
+        run: docker compose --profile test down -v
+
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # buf breaking compares against the base branch
+      - name: Lint protobuf contracts
+        run: docker run --rm -v "$PWD":/workspace -w /workspace bufbuild/buf:1.73.0 lint
+      - name: Check for breaking contract changes
+        if: github.event_name == 'pull_request'
+        run: |
+          git config --global --add safe.directory '*'
+          docker run --rm -v "$PWD":/workspace -w /workspace bufbuild/buf:1.73.0 \
+            breaking --against '.git#branch=origin/${{ github.base_ref }}'
+
+  proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Validate and format-check the Caddyfile
+        run: |
+          docker run --rm -v "$PWD/deploy/caddy:/etc/caddy:ro" caddy:2.11.6-alpine sh -c \
+            'caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile && caddy fmt --diff /etc/caddy/Caddyfile'

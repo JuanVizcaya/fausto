@@ -10,8 +10,9 @@ import (
 	"testing"
 )
 
-// repoRoot is a snapshot of a real project (Habbyte), relative to this package.
-const repoRoot = "../../testdata/example"
+// repoRoot is an earlier snapshot of a real project (Habbyte), as separate
+// gRPC services, whose calls across contracts the analysis follows.
+const repoRoot = "../../testdata/services"
 
 // fixture copies the real spec into a temporary directory and adds code
 // for the residents and platform components.

@@ -1,13 +1,22 @@
 id: platform
 name: Platform agent
 kind: agent
-scope: Shared service platform, build, local runtime, and protobuf tooling.
+scope: The backend binary and service platform, the public API, notifications, files and audit, the local runtime (Caddy, Keycloak, Postgres), and protobuf tooling.
 owns:
   - backend/
+  - backend/internal/modules/notifications/
+  - backend/internal/modules/files/
+  - backend/internal/modules/audit/
+  - proto/
   - compose.yaml
   - .env.example
   - buf.yaml
   - buf.gen.yaml
+  - deploy/
+  - docker/
 rules:
-  - Keep platform packages free of domain logic; they must not import any service package.
-  - Changes to service.Main or server.Server affect every service; note them in the PR.
+  - Keep platform packages free of domain logic; they must not import any module.
+  - Add a module to modules() in backend/cmd/habbyte/main.go when it is created; fausto checks the binary registers every module it runs.
+  - 'Hand-write the public API''s JSON types; never expose contract or protobuf types to clients. Every error response uses {"error": {"code", "message", "requestId", "details"}}.'
+  - Changes to app.Main, httpserver or module.Registry affect every module; note them in the PR.
+  - Regenerate backend/gen with every proto change, and lint with buf.

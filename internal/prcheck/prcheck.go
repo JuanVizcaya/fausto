@@ -38,6 +38,9 @@ type Checker struct {
 	Clone string
 	// Remote overrides https://github.com/<Repo>.git, for tests.
 	Remote string
+	// HandOff also publishes the spec revision each pull request is checked
+	// against and dispatches EventType (see handOff), before reporting.
+	HandOff bool
 }
 
 // Result is what checking one pull request did.
@@ -139,6 +142,13 @@ func (c *Checker) check(ctx context.Context, p pull, rev *store.SpecRevision) (s
 	if failed > 0 {
 		state, desc = "failure", fmt.Sprintf("%d of %d checks found drift", failed, len(report.Results))
 	}
+	// Before the status: a pull request with fausto's status counts as
+	// checked, so a failed hand-off must leave it to be tried again.
+	if c.HandOff {
+		if err := c.handOff(ctx, p, rev); err != nil {
+			return "", fmt.Errorf("hand off the spec: %w", err)
+		}
+	}
 	if err := c.GH.Call(ctx, "POST", "/repos/"+c.Repo+"/statuses/"+p.Head.SHA, map[string]string{
 		"state": state, "context": Context, "description": desc + revisionTag(rev.N),
 	}, nil); err != nil {
@@ -179,11 +189,7 @@ func (c *Checker) fetch(ctx context.Context, p pull) (string, func(), error) {
 			return "", nil, err
 		}
 	}
-	remote := c.Remote
-	if remote == "" {
-		remote = "https://github.com/" + c.Repo + ".git"
-	}
-	if _, err := c.git(ctx, github.GitAuthEnv(c.GH.Token), "fetch", "--quiet", "--no-tags", remote, fmt.Sprintf("+refs/pull/%d/head:refs/pull/%d", p.Number, p.Number)); err != nil {
+	if _, err := c.git(ctx, github.GitAuthEnv(c.GH.Token), "fetch", "--quiet", "--no-tags", c.remote(), fmt.Sprintf("+refs/pull/%d/head:refs/pull/%d", p.Number, p.Number)); err != nil {
 		return "", nil, err
 	}
 	data, err := c.git(ctx, nil, "archive", "--format=tar", p.Head.SHA)
@@ -200,6 +206,14 @@ func (c *Checker) fetch(ctx context.Context, p pull) (string, func(), error) {
 		return "", nil, err
 	}
 	return dir, cleanup, nil
+}
+
+// remote is the project's repository URL.
+func (c *Checker) remote() string {
+	if c.Remote != "" {
+		return c.Remote
+	}
+	return "https://github.com/" + c.Repo + ".git"
 }
 
 func (c *Checker) git(ctx context.Context, env []string, args ...string) ([]byte, error) {

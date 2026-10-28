@@ -24,6 +24,10 @@ var ctx = context.Background()
 
 const repoRoot = "../../testdata/example"
 
+// servicesRoot is an earlier snapshot of the project, as separate gRPC
+// services, each owning its database.
+const servicesRoot = "../../testdata/services"
+
 func run(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-c", "safe.directory=*", "-c", "user.name=Test", "-c", "user.email=test@example.com"}, args...)...)
@@ -39,13 +43,19 @@ func run(t *testing.T, dir string, args ...string) string {
 // main and returns a store for it, with an empty database.
 func newRepo(t *testing.T) *Store {
 	t.Helper()
-	files, err := check.ListFiles(repoRoot)
+	return newRepoFrom(t, repoRoot)
+}
+
+// newRepoFrom is newRepo for the project at src.
+func newRepoFrom(t *testing.T, src string) *Store {
+	t.Helper()
+	files, err := check.ListFiles(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	root := t.TempDir()
 	for _, f := range files {
-		data, err := os.ReadFile(filepath.Join(repoRoot, f))
+		data, err := os.ReadFile(filepath.Join(src, f))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -146,7 +156,7 @@ func TestCreateApproveCreatesTasks(t *testing.T) {
 
 	d, err := s.Create(ctx, "Plan billing service", "Billing will own invoices.", "", []edit.Change{
 		{Kind: "component", Value: json.RawMessage(`{"id":"billing","name":"Billing service","kind":"service",
-			"layer":"domain","status":"planned","owner":"platform","tech":["go","grpc"]}`)},
+			"layer":"modules","status":"planned","owner":"platform","tech":["go"]}`)},
 		{Kind: "principle", ID: principle.ID, Value: raw(t, principle)},
 	})
 	if err != nil {
@@ -170,8 +180,8 @@ func TestCreateApproveCreatesTasks(t *testing.T) {
 	if p == nil || len(p.SpecChanges) != 2 || !slices.Contains(p.Components, "billing") {
 		t.Errorf("platform plan = %+v", p)
 	}
-	if r := plan(d, "residents"); r == nil || len(r.SpecChanges) != 1 {
-		t.Errorf("residents plan = %+v (principle changes reach every agent)", r)
+	if r := plan(d, "core"); r == nil || len(r.SpecChanges) != 1 {
+		t.Errorf("core plan = %+v (principle changes reach every agent)", r)
 	}
 	if o := plan(d, "orchestrator"); o == nil || len(o.SpecChanges) != 1 {
 		t.Errorf("orchestrator plan = %+v (principle changes reach every charter, agent or human)", o)
@@ -259,7 +269,7 @@ func TestCreateApproveCreatesTasks(t *testing.T) {
 func TestDriftBecomesTaskFindings(t *testing.T) {
 	s := newRepo(t)
 	d, err := s.Create(ctx, "Add billing", "", "", []edit.Change{
-		{Kind: "component", Value: json.RawMessage(`{"id":"billing","name":"Billing","kind":"service","layer":"domain",
+		{Kind: "component", Value: json.RawMessage(`{"id":"billing","name":"Billing","kind":"service","layer":"modules",
 			"status":"active","owner":"platform","runtime":{"cmd":"backend/cmd/billing","compose":"billing"}}`)},
 	})
 	if err != nil {
@@ -281,7 +291,7 @@ func TestDeleteComponentOmitsItFromTask(t *testing.T) {
 	s := newRepo(t)
 	add, err := s.Create(ctx, "Add throwaway service", "", "", []edit.Change{
 		{Kind: "component", Value: json.RawMessage(`{"id":"throwaway","name":"Throwaway","kind":"service",
-			"layer":"domain","status":"planned","owner":"platform"}`)},
+			"layer":"modules","status":"planned","owner":"platform"}`)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -311,8 +321,8 @@ func TestReject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan(d, "gateway") == nil {
-		t.Errorf("gateway (owner of web, which uses react) gets no task: %+v", d.Plans)
+	if plan(d, "platform") == nil {
+		t.Errorf("platform (owner of web, which uses react) gets no task: %+v", d.Plans)
 	}
 	if _, err := s.Reject(ctx, d.ID); err != nil {
 		t.Fatal(err)
@@ -408,29 +418,30 @@ func TestNonConflictingProposalAfterBaseMoved(t *testing.T) {
 	merge(t, s, a.ID)
 	merge(t, s, b.ID)
 	sp := currentSpec(t, s)
-	if len(sp.Domains.Glossary) != 4 || sp.Tech.Technologies[len(sp.Tech.Technologies)-1].ID != "nats" {
+	if len(sp.Domains.Glossary) != 11 || sp.Tech.Technologies[len(sp.Tech.Technologies)-1].ID != "nats" {
 		t.Errorf("both proposals not applied")
 	}
 }
 
 func TestMilestoneProposal(t *testing.T) {
 	s := newRepo(t)
-	m := *currentSpec(t, s).Milestone("public-api-v1")
-	m.ExitCriteria = append(m.ExitCriteria, spec.Criterion{Text: "Rate limits per tenant"})
+	m := *currentSpec(t, s).Milestone("m1-onboarding")
+	m.ExitCriteria = append(m.ExitCriteria, spec.Criterion{Text: "A development can be closed by governance"})
 	m.Target = "2026-Q4"
-	d, err := s.Create(ctx, "Scope public API", "", "public-api-v1", []edit.Change{{Kind: "milestone", ID: m.ID, Value: raw(t, m)}})
+	d, err := s.Create(ctx, "Scope onboarding", "", "m1-onboarding", []edit.Change{{Kind: "milestone", ID: m.ID, Value: raw(t, m)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if d.Milestone != "public-api-v1" || len(d.Changes) != 1 || d.Changes[0].Kind != "milestone" {
+	if d.Milestone != "m1-onboarding" || len(d.Changes) != 1 || d.Changes[0].Kind != "milestone" {
 		t.Errorf("detail = %+v", d.Proposal)
 	}
-	// The milestone's only component is api, owned by the gateway agent.
+	// The milestone's components (developments, iam, control) are owned by
+	// the core agent.
 	// Other charters may also get plans here, for failing checks already
 	// present in the copied repository (e.g. a human-owned component with
 	// drift) — unrelated to this milestone change.
-	if g := plan(d, "gateway"); g == nil || len(g.SpecChanges) != 1 {
-		t.Fatalf("gateway plan = %+v (plans = %+v)", g, d.Plans)
+	if g := plan(d, "core"); g == nil || len(g.SpecChanges) != 1 {
+		t.Fatalf("core plan = %+v (plans = %+v)", g, d.Plans)
 	}
 	merge(t, s, d.ID)
 	after := currentSpec(t, s)
@@ -439,11 +450,11 @@ func TestMilestoneProposal(t *testing.T) {
 		t.Fatalf("tasks = %+v, plans = %+v", tasks, d.Plans)
 	}
 	for _, task := range tasks {
-		if task.Milestone != "public-api-v1" {
+		if task.Milestone != "m1-onboarding" {
 			t.Errorf("task %s: milestone = %q", task.ID, task.Milestone)
 		}
 	}
-	if got := after.Milestone("public-api-v1"); got.Target != "2026-Q4" || len(got.ExitCriteria) != 4 {
+	if got := after.Milestone("m1-onboarding"); got.Target != "2026-Q4" || len(got.ExitCriteria) != 4 {
 		t.Errorf("milestone = %+v", got)
 	}
 }
@@ -460,7 +471,9 @@ func TestProposalForUnknownMilestone(t *testing.T) {
 }
 
 func TestRuntimeFindingsGoToComposeOwner(t *testing.T) {
-	s := newRepo(t)
+	// In the services snapshot each service's agent owns its database,
+	// while compose.yaml is the platform agent's.
+	s := newRepoFrom(t, servicesRoot)
 	// Require hardening on databases too; residents-db (owned by the
 	// residents agent) is not hardened, and the fix is in compose.yaml,
 	// which the platform agent owns.
@@ -486,17 +499,19 @@ func TestRiskProposal(t *testing.T) {
 	s := newRepo(t)
 	var r spec.Risk
 	for _, x := range currentSpec(t, s).Risks.Risks {
-		if x.ID == "no-backups" {
+		if x.ID == "access-vendors-vary" {
 			r = x
 		}
 	}
 	r.Status = "mitigating"
-	d, err := s.Create(ctx, "Start backups", "", "", []edit.Change{{Kind: "risk", ID: r.ID, Value: raw(t, r)}})
+	r.Components = append(r.Components, "api")
+	d, err := s.Create(ctx, "Spike vendors", "", "", []edit.Change{{Kind: "risk", ID: r.ID, Value: raw(t, r)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// residents-db is owned by the residents agent; the risk by platform.
-	for _, agent := range []string{"residents", "platform"} {
+	// The risk and its devices and accesscontrol are the access agent's;
+	// api, now listed too, is the platform agent's.
+	for _, agent := range []string{"access", "platform"} {
 		if p := plan(d, agent); p == nil || len(p.SpecChanges) != 1 {
 			t.Errorf("%s plan = %+v", agent, p)
 		}
@@ -512,12 +527,12 @@ func TestEventProposal(t *testing.T) {
 	s := newRepo(t)
 	e := currentSpec(t, s).Events.Events[0]
 	e.Consumers = []string{"api"}
-	d, err := s.Create(ctx, "API listens for registrations", "", "", []edit.Change{{Kind: "event", ID: e.ID, Value: raw(t, e)}})
+	d, err := s.Create(ctx, "API listens for accepted invitations", "", "", []edit.Change{{Kind: "event", ID: e.ID, Value: raw(t, e)}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Producer residents (residents agent) and consumer api (gateway agent).
-	for _, agent := range []string{"residents", "gateway"} {
+	// Producer iam (core agent) and consumer api (platform agent).
+	for _, agent := range []string{"core", "platform"} {
 		if p := plan(d, agent); p == nil || len(p.SpecChanges) != 1 {
 			t.Errorf("%s plan = %+v", agent, p)
 		}
@@ -725,7 +740,7 @@ func TestKeptSpecWaitsForMerge(t *testing.T) {
 	keepSpec(t, s)
 	d, err := s.Create(ctx, "Plan billing", "", "", []edit.Change{
 		{Kind: "agent", Value: json.RawMessage(`{"id":"billing","name":"Billing agent","kind":"agent","scope":"Billing.","owns":["backend/internal/billing/"]}`)},
-		{Kind: "component", Value: json.RawMessage(`{"id":"billing","name":"Billing service","kind":"service","layer":"domain","status":"planned","owner":"billing"}`)},
+		{Kind: "component", Value: json.RawMessage(`{"id":"billing","name":"Billing service","kind":"service","layer":"modules","status":"planned","owner":"billing"}`)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -764,7 +779,7 @@ func TestKeptSpecMergesEdits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := s.Create(ctx, "Deprecate dummy", "", "", []edit.Change{componentChange(t, s, "dummy", "deprecated")})
+	b, err := s.Create(ctx, "Deprecate devices", "", "", []edit.Change{componentChange(t, s, "devices", "deprecated")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -774,8 +789,8 @@ func TestKeptSpecMergesEdits(t *testing.T) {
 		}
 	}
 	sp := keptSpec(t, s)
-	if sp.Component("web").Status != "active" || sp.Component("dummy").Status != "deprecated" {
-		t.Errorf("web %s, dummy %s: both changes should be in", sp.Component("web").Status, sp.Component("dummy").Status)
+	if sp.Component("web").Status != "active" || sp.Component("devices").Status != "deprecated" {
+		t.Errorf("web %s, devices %s: both changes should be in", sp.Component("web").Status, sp.Component("devices").Status)
 	}
 	if r, _ := s.DB.SpecRevision(ctx, 0); r.N != 3 {
 		t.Errorf("latest revision %d, want 3", r.N)
@@ -787,11 +802,11 @@ func TestKeptSpecMergesEdits(t *testing.T) {
 func TestKeptSpecStale(t *testing.T) {
 	s := newRepo(t)
 	keepSpec(t, s)
-	d, err := s.Create(ctx, "Narrow residents", "", "", []edit.Change{agentChange(t, s, "residents", "Residents only.")})
+	d, err := s.Create(ctx, "Narrow core", "", "", []edit.Change{agentChange(t, s, "core", "iam only.")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	other, err := s.Create(ctx, "Widen residents", "", "", []edit.Change{agentChange(t, s, "residents", "Residents, and more.")})
+	other, err := s.Create(ctx, "Widen core", "", "", []edit.Change{agentChange(t, s, "core", "The core, and more.")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -799,7 +814,7 @@ func TestKeptSpecStale(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, _ := s.Detail(ctx, d.ID)
-	if !strings.Contains(got.Conflict, "agent `residents` changed in fausto") {
+	if !strings.Contains(got.Conflict, "agent `core` changed in fausto") {
 		t.Errorf("conflict = %q", got.Conflict)
 	}
 	var ce *ConflictError

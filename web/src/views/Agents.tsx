@@ -46,7 +46,7 @@ export function KindIcon({ kind }: { kind: Agent["kind"] }) {
   );
 }
 
-export const kindLabel = (kind: Agent["kind"]) => (kind === "human" ? "Human" : "AI agent");
+export const kindLabel = (kind: Agent["kind"]) => ({ human: "Human", agent: "AI agent", auditor: "AI auditor" })[kind];
 
 export function AgentsView({ spec, report, proposals, item, go, info }: ViewProps) {
   const [query, setQuery] = useState("");
@@ -203,7 +203,9 @@ function AgentDetail({
       <p className="muted small">
         {a.kind === "human"
           ? "A person. Reviews and accepts proposals, and works their own tasks by hand."
-          : "Runs in Claude Code from its generated definition, works the tasks assigned to it, and changes only the paths it owns."}
+          : a.kind === "auditor"
+            ? "Runs in Claude Code from its generated definition and reviews pull requests against the spec, citing the rules it finds broken. It owns no paths and changes nothing."
+            : "Runs in Claude Code from its generated definition, works the tasks assigned to it, and changes only the paths it owns."}
       </p>
 
       {reviews.length > 0 && (

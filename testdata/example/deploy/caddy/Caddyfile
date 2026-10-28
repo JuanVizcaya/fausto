@@ -1,0 +1,44 @@
+# The only entry point from the internet: TLS, the API and Keycloak. Real
+# domains get Let's Encrypt certificates; *.localhost gets certificates from
+# Caddy's local CA, so this file serves local Compose and production alike.
+{
+	# Set ACME_EMAIL in production; Let's Encrypt rejects the local default.
+	email {$ACME_EMAIL:admin@habbyte.localhost}
+	# The local CA's root is trusted by hand (see README), never installed
+	# into the container's trust store.
+	skip_install_trust
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	request_body {
+		max_size 10MB
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+{$API_HOST:api.localhost} {
+	import common
+	reverse_proxy backend:8080 {
+		health_uri /readyz
+		health_interval 10s
+	}
+}
+
+{$AUTH_HOST:auth.localhost} {
+	import common
+	# The admin console and management endpoints are reached only through a
+	# local port (Compose) or SSM port forwarding (AWS).
+	@internal path /admin /admin/* /metrics /metrics/* /health /health/*
+	respond @internal 404
+	reverse_proxy keycloak:8080
+}

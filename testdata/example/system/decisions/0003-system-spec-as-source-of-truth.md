@@ -1,7 +1,7 @@
 ---
 id: "0003"
 title: system/ is the source of truth for architecture
-status: accepted
+status: superseded
 date: 2026-10-05
 ---
 

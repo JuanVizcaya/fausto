@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/JuanVizcaya/fausto/internal/spec"
@@ -21,6 +22,14 @@ func checkContracts(r *Repo) []Finding {
 	declared := map[string]bool{}
 	for _, c := range r.Spec.System.Components {
 		for _, ct := range c.Contracts {
+			if ct.Go != "" {
+				if c.Status == "active" && !slices.ContainsFunc(r.filesUnder(ct.Go), func(f string) bool {
+					return path.Dir(f) == ct.Go && strings.HasSuffix(f, ".go") && !strings.HasSuffix(f, "_test.go")
+				}) {
+					out = append(out, Finding{Message: "declared Go contract has no Go files", Component: c.ID, Path: ct.Go})
+				}
+				continue
+			}
 			declared[ct.Proto] = true
 			protos := 0
 			for _, f := range r.filesUnder(ct.Proto) {

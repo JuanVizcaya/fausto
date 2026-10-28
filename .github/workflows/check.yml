@@ -16,6 +16,38 @@
 #
 # Without fausto's database here, the ownership and agents checks run only
 # for charters kept in the repository.
+#
+# For a spec fausto keeps, fausto hands each pull request to a workflow on
+# repository_dispatch (FAUSTO_PR_HANDOFF; see the README), which runs the
+# project checks against the spec revision fausto checked, and reports a
+# status of its own on the pull request's commit:
+#
+#   on:
+#     repository_dispatch:
+#       types: [fausto-spec]
+#   jobs:
+#     check:
+#       uses: JuanVizcaya/fausto/.github/workflows/check.yml@v0
+#       with:
+#         ref: ${{ github.event.client_payload.head_sha }}
+#         spec-ref: ${{ github.event.client_payload.spec_ref }}
+#         commands: true
+#     report:
+#       needs: check
+#       if: always()
+#       runs-on: ubuntu-latest
+#       permissions:
+#         statuses: write
+#       steps:
+#         - env:
+#             GH_TOKEN: ${{ github.token }}
+#             SHA: ${{ github.event.client_payload.head_sha }}
+#             RESULT: ${{ needs.check.result }}
+#             URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+#           run: |
+#             state=failure; [ "$RESULT" = success ] && state=success
+#             gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state="$state" \
+#               -f context=fausto/project-checks -f target_url="$URL" -f description="Project checks: $RESULT"
 name: fausto check
 
 on:
@@ -45,6 +77,18 @@ on:
         description: Where the project's protobuf packages live, if not as in .fausto.yaml or proto.
         type: string
         default: ""
+      ref:
+        description: The commit to check, such as a handed-off pull request's head; default, the event's.
+        type: string
+        default: ""
+      spec-ref:
+        description: A spec ref fausto handed off (refs/fausto/spec/rN); the spec is read from it instead of system/.
+        type: string
+        default: ""
+      commands:
+        description: Also run the project checks' commands (system/checks.yaml). They are the checked commit's code.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,6 +99,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Fetch the spec fausto handed off
+        if: ${{ inputs.spec-ref != '' }}
+        env:
+          SPEC_REF: ${{ inputs.spec-ref }}
+        run: |
+          set -euo pipefail
+          [[ "$SPEC_REF" =~ ^refs/fausto/spec/r[0-9]+$ ]] || { echo "::error::not a fausto spec ref: $SPEC_REF"; exit 1; }
+          git fetch --quiet --no-tags origin "+$SPEC_REF:$SPEC_REF"
+          mkdir -p "$RUNNER_TEMP/spec"
+          git archive "$SPEC_REF" | tar -x -C "$RUNNER_TEMP/spec"
       - name: Go, to build fausto from a branch or commit
         if: ${{ inputs.version != 'latest' && !startsWith(inputs.version, 'v') }}
         uses: actions/setup-go@v6
@@ -86,6 +142,8 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
         env:
           CHECKS: ${{ inputs.checks }}
+          SPEC_REF: ${{ inputs.spec-ref }}
+          COMMANDS: ${{ inputs.commands }}
           COMMANDS_DIR: ${{ inputs.commands-dir }}
           COMPOSE_FILE: ${{ inputs.compose-file }}
           PROTO_ROOT: ${{ inputs.proto-root }}
@@ -93,6 +151,8 @@ jobs:
           set -euo pipefail
           fausto version
           flags=(-github)
+          [ -z "$SPEC_REF" ] || flags+=(-spec-from "$RUNNER_TEMP/spec")
+          [ "$COMMANDS" != true ] || flags+=(-commands)
           [ -z "$COMMANDS_DIR" ] || flags+=(-commands-dir "$COMMANDS_DIR")
           [ -z "$COMPOSE_FILE" ] || flags+=(-compose-file "$COMPOSE_FILE")
           [ -z "$PROTO_ROOT" ] || flags+=(-proto-root "$PROTO_ROOT")

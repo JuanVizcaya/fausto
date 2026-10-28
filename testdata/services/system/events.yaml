@@ -1,0 +1,13 @@
+# Asynchronous events between services. Each event has one producer and is
+# defined by a protobuf message in a versioned package, which must be a
+# contract of the producer in system.yaml once the event is active. Breaking
+# changes go in a new package version, as with gRPC contracts.
+events:
+  - id: residents.resident-registered
+    title: Resident registered
+    description: A resident was linked to a unit. Billing uses it to start charging the unit's fees; maintenance uses it to know who may report problems.
+    status: planned
+    producer: residents
+    message: habbyte.residents.events.v1.ResidentRegistered
+    key: tenant_id
+    delivery: at-least-once

@@ -1,5 +1,5 @@
-// Package requestid carries a request ID through contexts, HTTP headers, and
-// gRPC metadata so logs from every service can be correlated.
+// Package requestid carries a request ID through contexts and HTTP headers so
+// logs from every module can be correlated.
 package requestid
 
 import (
@@ -8,10 +8,7 @@ import (
 	"encoding/hex"
 )
 
-const (
-	Header      = "X-Request-ID"
-	MetadataKey = "x-request-id"
-)
+const Header = "X-Request-ID"
 
 type contextKey struct{}
 
