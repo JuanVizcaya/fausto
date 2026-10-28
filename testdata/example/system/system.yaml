@@ -1,142 +1,437 @@
 # Habbyte system model: components, how they connect, and which layer each
 # belongs to. `fausto check` verifies the code against this file.
+#
+# The MVP is a modular monolith (ADR 0007): one habbyte binary runs the
+# public API and 14 modules. Modules call each other only through their Go
+# contract packages, and each owns one schema in the shared Postgres.
 name: habbyte
-description: Apartment complex management.
+description: Condominium management for Mexico.
 
-# A layer may depend only on the layers listed in may_depend_on, plus itself
-# for library components.
+# A layer may depend only on the layers listed in may_depend_on, plus itself.
 layers:
   - id: edge
-    description: Entry points that face browsers and other clients.
-    may_depend_on: [domain, platform]
-  - id: domain
-    description: Business services, one per bounded context. Reachable only on the internal network.
+    description: What clients reach, the Caddy proxy and the public API, and the binary that serves it.
+    may_depend_on: [modules, identity, platform]
+  - id: identity
+    description: Keycloak, which signs people in. Roles and permissions are iam's, not Keycloak's.
+    may_depend_on: [data]
+  - id: modules
+    description: Bounded contexts, one module each. They call each other only through contracts and react to events.
     may_depend_on: [data, platform]
   - id: data
-    description: Datastores, each owned by exactly one domain service.
+    description: Postgres, holding one schema per module and Keycloak's database.
     may_depend_on: []
   - id: platform
-    description: Shared libraries for process setup, transports, and cross-cutting concerns.
+    description: Shared libraries for process setup, transports, the module registry, and cross-cutting concerns. No domain logic.
     may_depend_on: []
 
 components:
   - id: web
     name: Web app
-    description: React frontend for managers and residents.
+    description: React app for browsers and the native shells' webviews.
     kind: frontend
     layer: edge
     status: planned
-    owner: gateway
+    owner: platform
     tech: [react]
     depends_on:
-      - target: api
+      - target: caddy
         protocol: http
 
-  - id: api
-    name: API gateway
-    description: HTTP/JSON API for the web app; translates requests into gRPC calls to domain services.
+  - id: caddy
+    name: Edge proxy
+    description: Terminates TLS and routes api. to the backend and auth. to Keycloak, which it hides the admin console of. The only published service.
     kind: gateway
     layer: edge
     status: active
-    owner: gateway
-    tech: [go, http-json, grpc]
-    paths: [backend/cmd/api, backend/internal/api]
+    owner: platform
+    tech: [caddy]
+    paths: [deploy/caddy]
     runtime:
-      cmd: backend/cmd/api
-      compose: api
+      image: caddy
+      compose: caddy
     depends_on:
-      - target: residents
-        protocol: grpc
-      - target: platform
-        protocol: library
+      - target: habbyte
+        protocol: http
+      - target: keycloak
+        protocol: http
 
-  - id: residents
-    name: Residents service
-    description: People who live in or are linked to units, scoped by tenant.
+  - id: habbyte
+    name: Habbyte backend
+    description: The MVP binary. Registers every module and mounts the public API in one process.
     kind: service
-    layer: domain
+    layer: edge
     status: active
-    owner: residents
-    tech: [go, grpc]
-    paths: [backend/cmd/residents, backend/internal/residents]
+    owner: platform
+    tech: [go]
+    paths: [backend/cmd/habbyte]
     runtime:
-      cmd: backend/cmd/residents
-      compose: residents
-    contracts:
-      - proto: proto/habbyte/residents/v1
-        generated: backend/gen/habbyte/residents/v1
-    data:
-      - table: residents
-        pii: [full_name, email, phone]
+      cmd: backend/cmd/habbyte
+      compose: backend
     depends_on:
-      - target: residents-db
-        protocol: sql
       - target: platform
         protocol: library
 
-  - id: residents-db
-    name: Residents database
-    description: Postgres database owned by the residents service.
+  - id: api
+    name: Public API
+    description: HTTP/JSON under /v1. Holds sessions, checks permissions with iam, and composes screens such as the resident home. Clients never see internal contracts.
+    kind: gateway
+    layer: edge
+    status: active
+    owner: platform
+    tech: [go, http-json]
+    paths: [backend/internal/edge/api]
+    runtime:
+      host: habbyte
+    depends_on:
+      - target: iam
+        protocol: contract
+      - target: developments
+        protocol: contract
+      - target: finance
+        protocol: contract
+      - target: payments
+        protocol: contract
+      - target: community
+        protocol: contract
+      - target: amenities
+        protocol: contract
+      - target: accesscontrol
+        protocol: contract
+      - target: files
+        protocol: contract
+      - target: keycloak
+        protocol: http
+        description: OIDC code flow; the API keeps the tokens and gives the client a session cookie.
+      - target: platform
+        protocol: library
+
+  - id: iam
+    name: Identity and access
+    description: Accounts linked to Keycloak, invitations, the permission catalog, roles, grants per development and unit, guest links for external crews, and push device tokens.
+    kind: service
+    layer: modules
+    status: active
+    owner: core
+    tech: [go, postgres]
+    paths: [backend/internal/modules/iam]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/iam/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: iam
+      - target: platform
+        protocol: library
+
+  - id: developments
+    name: Developments
+    description: Organizations, developments and their setup, sections and towers, units, occupancy links, the committee, admin assignments, governance motions and votes, and bulk import.
+    kind: service
+    layer: modules
+    status: active
+    owner: core
+    tech: [go, postgres]
+    paths: [backend/internal/modules/developments]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/developments/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: developments
+      - target: platform
+        protocol: library
+
+  - id: control
+    name: Control
+    description: Habbyte's clients, plans, products enabled per development, subscriptions, support requests, global settings, and break-glass access requests.
+    kind: service
+    layer: modules
+    status: active
+    owner: core
+    tech: [go, postgres]
+    paths: [backend/internal/modules/control]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/control/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: control
+      - target: platform
+        protocol: library
+
+  - id: finance
+    name: Finance
+    description: Charge concepts and fee schedules, the per-unit ledger, charges, payments and allocations, payment evidence and review, delinquency rules, statements, and financial reports.
+    kind: service
+    layer: modules
+    status: active
+    owner: finance
+    tech: [go, postgres]
+    paths: [backend/internal/modules/finance]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/finance/contract
+    depends_on:
+      - target: files
+        protocol: contract
+      - target: postgres
+        protocol: sql
+        schema: finance
+      - target: platform
+        protocol: library
+
+  - id: payments
+    name: Payments
+    description: Provider accounts per development, checkout intents, provider payments, webhooks, refunds and idempotency. Mercado Pago is the first provider.
+    kind: service
+    layer: modules
+    status: active
+    owner: finance
+    tech: [go, postgres]
+    paths: [backend/internal/modules/payments]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/payments/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: payments
+      - target: platform
+        protocol: library
+
+  - id: invoicing
+    name: Invoicing
+    description: Fiscal profiles, signing certificates (CSD), CFDI 4.0 documents and payment complements, cancellations, and the PAC adapter.
+    kind: service
+    layer: modules
+    status: active
+    owner: finance
+    tech: [go, postgres]
+    paths: [backend/internal/modules/invoicing]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/invoicing/contract
+    depends_on:
+      - target: files
+        protocol: contract
+      - target: postgres
+        protocol: sql
+        schema: invoicing
+      - target: platform
+        protocol: library
+
+  - id: community
+    name: Community
+    description: Announcements, audience segments, documents and their access rules, and read receipts.
+    kind: service
+    layer: modules
+    status: active
+    owner: community
+    tech: [go, postgres]
+    paths: [backend/internal/modules/community]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/community/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: community
+      - target: platform
+        protocol: library
+
+  - id: amenities
+    name: Amenities
+    description: Amenities, rule sets, blocks, availability, reservations and approvals.
+    kind: service
+    layer: modules
+    status: active
+    owner: community
+    tech: [go, postgres]
+    paths: [backend/internal/modules/amenities]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/amenities/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: amenities
+      - target: platform
+        protocol: library
+
+  - id: operations
+    name: Operations
+    description: Preventive and corrective tasks, recurring schedules, assignments, evidence, impediments and validation.
+    kind: service
+    layer: modules
+    status: active
+    owner: community
+    tech: [go, postgres]
+    paths: [backend/internal/modules/operations]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/operations/contract
+    depends_on:
+      - target: files
+        protocol: contract
+      - target: postgres
+        protocol: sql
+        schema: operations
+      - target: platform
+        protocol: library
+
+  - id: accesscontrol
+    name: Access control
+    description: Access points, zones, access policies, credentials per person, the access log, and consent records.
+    kind: service
+    layer: modules
+    status: active
+    owner: access
+    tech: [go, postgres]
+    paths: [backend/internal/modules/accesscontrol]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/accesscontrol/contract
+    depends_on:
+      - target: devices
+        protocol: contract
+      - target: postgres
+        protocol: sql
+        schema: accesscontrol
+      - target: platform
+        protocol: library
+
+  - id: devices
+    name: Devices
+    description: The device registry, vendor accounts and adapters, a command queue with retries, vendor webhooks, and device health.
+    kind: service
+    layer: modules
+    status: active
+    owner: access
+    tech: [go, postgres]
+    paths: [backend/internal/modules/devices]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/devices/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: devices
+      - target: platform
+        protocol: library
+
+  - id: notifications
+    name: Notifications
+    description: Spanish templates, channels (email through SES, push through FCM, in-app inbox), preferences, and the delivery log.
+    kind: service
+    layer: modules
+    status: active
+    owner: platform
+    tech: [go, postgres]
+    paths: [backend/internal/modules/notifications]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/notifications/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: notifications
+      - target: platform
+        protocol: library
+
+  - id: files
+    name: Files
+    description: File metadata, the owning module and record, size and type limits, and presigned S3 uploads and downloads.
+    kind: service
+    layer: modules
+    status: active
+    owner: platform
+    tech: [go, postgres]
+    paths: [backend/internal/modules/files]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/files/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: files
+      - target: platform
+        protocol: library
+
+  - id: audit
+    name: Audit
+    description: The append-only audit trail, with actor, time, action, entity, and before and after.
+    kind: service
+    layer: modules
+    status: active
+    owner: platform
+    tech: [go, postgres]
+    paths: [backend/internal/modules/audit]
+    runtime:
+      host: habbyte
+    contracts:
+      - go: backend/internal/modules/audit/contract
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: audit
+      - target: platform
+        protocol: library
+
+  - id: keycloak
+    name: Keycloak
+    description: One realm for residents and administrators, with Google and Facebook sign-in, and a staff realm with mandatory MFA.
+    kind: service
+    layer: identity
+    status: active
+    owner: platform
+    tech: [keycloak]
+    runtime:
+      image: quay.io/keycloak/keycloak
+      compose: keycloak
+    depends_on:
+      - target: postgres
+        protocol: sql
+        schema: keycloak
+
+  - id: postgres
+    name: Postgres
+    description: One Postgres 18 server. The habbyte database holds one schema per module; Keycloak has a database of its own.
     kind: database
     layer: data
     status: active
-    owner: residents
+    owner: platform
     tech: [postgres]
+    paths: [deploy/postgres]
     runtime:
-      compose: residents-db
+      image: postgres
+      compose: postgres
 
   - id: platform
     name: Service platform
-    description: Process entry point, HTTP/gRPC server, middleware, health, request IDs, Postgres pools and migrations, gRPC clients.
+    description: Process setup and config, the HTTP server and middleware, health, request IDs, the module registry, Postgres pools and migrations, and the event envelope.
     kind: library
     layer: platform
     status: active
     owner: platform
-    tech: [go, grpc, goose]
+    tech: [go, goose]
     paths: [backend/internal/platform]
-
-  - id: administrators
-    name: Complex Administrators
-    description: Complex Administrators
-    kind: service
-    layer: domain
-    status: active
-    owner: administrators
-    tech: [go, grpc]
-    paths: [backend/cmd/administrators, backend/internal/administrators]
-    runtime:
-      cmd: backend/cmd/administrators
-      compose: administrators
     contracts:
-      - proto: proto/habbyte/administrators/v1
-        generated: backend/gen/habbyte/administrators/v1
-    data:
-      - table: administrators
-        pii: [company, email, phone]
-    depends_on:
-      - target: administrators-db
-        protocol: sql
-      - target: platform
-        protocol: library
-
-  - id: administrators-db
-    name: Administrators database
-    description: Postgres database owned by the administrators service.
-    kind: database
-    layer: data
-    status: active
-    owner: administrators
-    tech: [postgres]
-    runtime:
-      compose: administrators-db
-
-  - id: dummy
-    name: dummy service
-    kind: service
-    layer: domain
-    status: active
-    owner: platform
-    tech: [go, grpc]
-    depends_on:
-      - target: administrators-db
-        protocol: sql
+      - proto: proto/habbyte/platform/events/v1
+        generated: backend/gen/habbyte/platform/events/v1

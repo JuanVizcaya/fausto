@@ -1,0 +1,14 @@
+id: orchestrator
+name: Orchestrator
+kind: human
+scope: Owns the system spec and project-wide docs. Reviews and approves changes to architecture, principles, and ownership.
+owns:
+  - system/
+  - tasks/
+  - README.md
+  - CLAUDE.md
+  - .claude/
+  - .gitattributes
+  - .gitignore
+reviewers:
+  - "@JuanVizcaya"

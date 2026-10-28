@@ -1,0 +1,142 @@
+# Habbyte system model: components, how they connect, and which layer each
+# belongs to. `fausto check` verifies the code against this file.
+name: habbyte
+description: Apartment complex management.
+
+# A layer may depend only on the layers listed in may_depend_on, plus itself
+# for library components.
+layers:
+  - id: edge
+    description: Entry points that face browsers and other clients.
+    may_depend_on: [domain, platform]
+  - id: domain
+    description: Business services, one per bounded context. Reachable only on the internal network.
+    may_depend_on: [data, platform]
+  - id: data
+    description: Datastores, each owned by exactly one domain service.
+    may_depend_on: []
+  - id: platform
+    description: Shared libraries for process setup, transports, and cross-cutting concerns.
+    may_depend_on: []
+
+components:
+  - id: web
+    name: Web app
+    description: React frontend for managers and residents.
+    kind: frontend
+    layer: edge
+    status: planned
+    owner: gateway
+    tech: [react]
+    depends_on:
+      - target: api
+        protocol: http
+
+  - id: api
+    name: API gateway
+    description: HTTP/JSON API for the web app; translates requests into gRPC calls to domain services.
+    kind: gateway
+    layer: edge
+    status: active
+    owner: gateway
+    tech: [go, http-json, grpc]
+    paths: [backend/cmd/api, backend/internal/api]
+    runtime:
+      cmd: backend/cmd/api
+      compose: api
+    depends_on:
+      - target: residents
+        protocol: grpc
+      - target: platform
+        protocol: library
+
+  - id: residents
+    name: Residents service
+    description: People who live in or are linked to units, scoped by tenant.
+    kind: service
+    layer: domain
+    status: active
+    owner: residents
+    tech: [go, grpc]
+    paths: [backend/cmd/residents, backend/internal/residents]
+    runtime:
+      cmd: backend/cmd/residents
+      compose: residents
+    contracts:
+      - proto: proto/habbyte/residents/v1
+        generated: backend/gen/habbyte/residents/v1
+    data:
+      - table: residents
+        pii: [full_name, email, phone]
+    depends_on:
+      - target: residents-db
+        protocol: sql
+      - target: platform
+        protocol: library
+
+  - id: residents-db
+    name: Residents database
+    description: Postgres database owned by the residents service.
+    kind: database
+    layer: data
+    status: active
+    owner: residents
+    tech: [postgres]
+    runtime:
+      compose: residents-db
+
+  - id: platform
+    name: Service platform
+    description: Process entry point, HTTP/gRPC server, middleware, health, request IDs, Postgres pools and migrations, gRPC clients.
+    kind: library
+    layer: platform
+    status: active
+    owner: platform
+    tech: [go, grpc, goose]
+    paths: [backend/internal/platform]
+
+  - id: administrators
+    name: Complex Administrators
+    description: Complex Administrators
+    kind: service
+    layer: domain
+    status: active
+    owner: administrators
+    tech: [go, grpc]
+    paths: [backend/cmd/administrators, backend/internal/administrators]
+    runtime:
+      cmd: backend/cmd/administrators
+      compose: administrators
+    contracts:
+      - proto: proto/habbyte/administrators/v1
+        generated: backend/gen/habbyte/administrators/v1
+    data:
+      - table: administrators
+        pii: [company, email, phone]
+    depends_on:
+      - target: administrators-db
+        protocol: sql
+      - target: platform
+        protocol: library
+
+  - id: administrators-db
+    name: Administrators database
+    description: Postgres database owned by the administrators service.
+    kind: database
+    layer: data
+    status: active
+    owner: administrators
+    tech: [postgres]
+    runtime:
+      compose: administrators-db
+
+  - id: dummy
+    name: dummy service
+    kind: service
+    layer: domain
+    status: active
+    owner: platform
+    tech: [go, grpc]
+    depends_on:
+      - target: administrators-db
+        protocol: sql

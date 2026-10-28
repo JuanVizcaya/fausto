@@ -46,15 +46,16 @@ export interface Component {
   owner: string;
   tech?: string[];
   paths?: string[];
-  runtime?: { cmd?: string; compose?: string };
-  contracts?: { proto: string; generated?: string }[];
+  runtime?: { cmd?: string; compose?: string; host?: string; image?: string };
+  contracts?: { proto?: string; generated?: string; go?: string }[];
   data?: { table: string; pii?: string[] }[];
   depends_on?: Dependency[];
 }
 
 export interface Dependency {
   target: string;
-  protocol: "http" | "grpc" | "sql" | "library";
+  protocol: "http" | "grpc" | "sql" | "library" | "contract";
+  schema?: string;
   description?: string;
 }
 

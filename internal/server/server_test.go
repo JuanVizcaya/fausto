@@ -163,7 +163,7 @@ func TestCheck(t *testing.T) {
 }
 
 func TestCode(t *testing.T) {
-	res, body := get(t, "/api/code/residents")
+	res, body := get(t, "/api/code/iam")
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status %d: %s", res.StatusCode, body)
 	}
@@ -174,7 +174,7 @@ func TestCode(t *testing.T) {
 	if err := json.Unmarshal(body, &m); err != nil {
 		t.Fatal(err)
 	}
-	if m.Component != "residents" || len(m.Packages) == 0 {
+	if m.Component != "iam" || len(m.Packages) == 0 {
 		t.Errorf("model = %s", body)
 	}
 	if res, _ := get(t, "/api/code/nope"); res.StatusCode != http.StatusNotFound {

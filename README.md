@@ -9,8 +9,9 @@ and hands the resulting work to agents as tasks.
 
 Fausto is a separate tool: a project doesn't depend on it to build or run,
 and fausto works on a project only through its repository. It was first
-built for [Habbyte](https://github.com/CMOT/habyta); `testdata/example` is a
-snapshot of that project, used by the tests.
+built for [Habbyte](https://github.com/Ceferinto/habbyte); `testdata/example` is a
+snapshot of that project, a modular monolith, used by the tests, and
+`testdata/services` an earlier one, as separate gRPC services.
 
 Module `github.com/JuanVizcaya/fausto`, Go 1.27. Install the CLI, then run it
 from anywhere inside a project's clone (it finds the nearest parent
@@ -56,6 +57,33 @@ proto_root: api/proto
 ```
 
 or passes `-commands-dir`, `-compose-file` and `-proto-root`.
+
+### A modular monolith
+
+A component can run inside another one's process, as a module does in a
+modular monolith's binary:
+
+```yaml
+- id: payments
+  kind: service
+  layer: modules
+  paths: [backend/internal/modules/payments]   # the first path is its package
+  runtime: {host: habbyte}                     # no cmd or compose of its own
+  contracts:
+    - go: backend/internal/modules/payments/contract
+  depends_on:
+    - {target: files, protocol: contract}      # an in-process call through files' Go contract
+    - {target: postgres, protocol: sql, schema: payments}
+```
+
+The host's command must import each active module's package; other
+components may import only its `go` contract, with a `contract` dependency,
+which works only within one process. On a database server that several
+components share, each sql dependency names the `schema` it owns, and each
+schema has one owner. A component run from an upstream image, such as a
+proxy, declares `runtime.image` (`caddy`, or `quay.io/keycloak/keycloak`),
+and its Compose service must run that image. Ports bound to loopback don't
+count as published.
 
 ### In a project's CI
 

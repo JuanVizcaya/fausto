@@ -166,9 +166,38 @@ func checkReferences(s *spec.Spec) []Finding {
 				add(c.ID, systemFile, "sql dependency on %q, which is not a database", target.ID)
 			case d.Protocol == "library" && target.Kind != "library":
 				add(c.ID, systemFile, "library dependency on %q, which is not a library", target.ID)
-			case d.Protocol == "grpc" && len(target.Contracts) == 0:
-				add(c.ID, systemFile, "grpc dependency on %q, which declares no contracts", target.ID)
+			case d.Protocol == "grpc" && !slices.ContainsFunc(target.Contracts, func(ct spec.Contract) bool { return ct.Proto != "" }):
+				add(c.ID, systemFile, "grpc dependency on %q, which declares no protobuf contracts", target.ID)
+			case d.Protocol == "contract" && !slices.ContainsFunc(target.Contracts, func(ct spec.Contract) bool { return ct.Go != "" }):
+				add(c.ID, systemFile, "contract dependency on %q, which declares no Go contract", target.ID)
+			case d.Protocol == "contract" && c.Process() != target.Process():
+				add(c.ID, systemFile, "contract dependency on %q, which runs in another process; call it over grpc", target.ID)
+			case d.Schema != "" && d.Protocol != "sql":
+				add(c.ID, systemFile, "%s dependency on %q names a schema; only sql dependencies do", d.Protocol, target.ID)
 			}
+		}
+		if h := c.Runtime.Host; h != "" {
+			host := s.Component(h)
+			switch {
+			case host == nil:
+				add(c.ID, systemFile, "runtime.host is unknown component %q", h)
+			case host.ID == c.ID:
+				add(c.ID, systemFile, "runtime.host is the component itself")
+			case host.Runtime.Cmd == "":
+				add(c.ID, systemFile, "runtime.host %q declares no runtime.cmd to run in", h)
+			case host.Runtime.Host != "":
+				add(c.ID, systemFile, "runtime.host %q itself runs in %q; name that one", h, host.Runtime.Host)
+			default:
+				if l := s.Layer(host.Layer); l != nil && host.Layer != c.Layer && !slices.Contains(l.MayDependOn, c.Layer) {
+					add(c.ID, systemFile, "layer %q of host %q may not depend on layer %q", host.Layer, h, c.Layer)
+				}
+			}
+			if c.Runtime.Cmd != "" || c.Runtime.Compose != "" || c.Runtime.Image != "" {
+				add(c.ID, systemFile, "runs in %q, so it declares no runtime.cmd, runtime.compose or runtime.image of its own", h)
+			}
+		}
+		if c.Runtime.Image != "" && c.Runtime.Cmd != "" {
+			add(c.ID, systemFile, "declares both runtime.cmd and runtime.image; a component runs one or the other")
 		}
 	}
 	for _, d := range s.Domains.Domains {

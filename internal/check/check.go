@@ -76,7 +76,7 @@ var All = []Check{
 	{"services", "Declared services match their commands and the Compose file.", checkServices, false},
 	{"layers", "Go imports follow declared dependencies and layers.", checkLayers, false},
 	{"db-ownership", "Each database is used by exactly one declared owner.", checkDBOwnership, false},
-	{"contracts", "Declared protobuf contracts exist, are versioned, and are generated.", checkContracts, false},
+	{"contracts", "Declared contracts exist; protobuf ones are versioned and generated.", checkContracts, false},
 	{"ownership", "Every file has one owning agent, matching its component's owner.", checkOwnership, true},
 	{"runtime", "Compose services meet the runtime rules their requirements ask for.", checkRuntime, false},
 	{"agents", "Files generated from the agent charters (.github/CODEOWNERS, and the Claude Code agent definitions in .claude/agents for charters kept in the repository) match the charters.", checkAgents, true},
@@ -263,18 +263,20 @@ func (r *Repo) componentOf(path string) *spec.Component {
 		for _, ct := range c.Contracts {
 			consider(c, ct.Proto)
 			consider(c, ct.Generated)
+			consider(c, ct.Go)
 		}
 	}
 	return best
 }
 
-// contractOwner returns the component whose generated contract contains
-// path and that contract, or nil.
+// contractOwner returns the component whose generated or Go contract
+// contains path and that contract, or nil.
 func (r *Repo) contractOwner(path string) (*spec.Component, *spec.Contract) {
 	for i := range r.Spec.System.Components {
 		c := &r.Spec.System.Components[i]
 		for j := range c.Contracts {
-			if ct := &c.Contracts[j]; ct.Generated != "" && within(path, ct.Generated) {
+			ct := &c.Contracts[j]
+			if ct.Generated != "" && within(path, ct.Generated) || ct.Go != "" && within(path, ct.Go) {
 				return c, ct
 			}
 		}

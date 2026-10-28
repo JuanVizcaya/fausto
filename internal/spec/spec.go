@@ -83,11 +83,20 @@ type Component struct {
 type Runtime struct {
 	Cmd     string `json:"cmd,omitempty"`
 	Compose string `json:"compose,omitempty"`
+	// Host is the component whose process this one runs in, such as a
+	// module in a modular monolith's binary.
+	Host string `json:"host,omitempty"`
+	// Image is the upstream container image the component runs, for one
+	// built from no code in the repository.
+	Image string `json:"image,omitempty"`
 }
 
+// Contract is a protobuf package (Proto, with its Generated code) or a Go
+// package of interfaces called in process (Go).
 type Contract struct {
-	Proto     string `json:"proto"`
+	Proto     string `json:"proto,omitempty"`
 	Generated string `json:"generated,omitempty"`
+	Go        string `json:"go,omitempty"`
 }
 
 type Table struct {
@@ -96,8 +105,11 @@ type Table struct {
 }
 
 type Dependency struct {
-	Target      string `json:"target"`
-	Protocol    string `json:"protocol"`
+	Target   string `json:"target"`
+	Protocol string `json:"protocol"`
+	// Schema is the schema, or database, a sql dependency owns on a
+	// database server that several components share.
+	Schema      string `json:"schema,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -332,6 +344,26 @@ func (s *Spec) Layer(id string) *Layer {
 		}
 	}
 	return nil
+}
+
+// Process returns the id of the component whose process c runs in: its
+// host, or c itself.
+func (c *Component) Process() string {
+	if c.Runtime.Host != "" {
+		return c.Runtime.Host
+	}
+	return c.ID
+}
+
+// Hosted returns the components that run in host's process.
+func (s *Spec) Hosted(host string) []*Component {
+	var out []*Component
+	for i := range s.System.Components {
+		if s.System.Components[i].Runtime.Host == host {
+			out = append(out, &s.System.Components[i])
+		}
+	}
+	return out
 }
 
 // Uses reports whether c declares a dependency on target, using one of

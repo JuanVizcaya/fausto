@@ -1,5 +1,5 @@
-// Package postgres opens connection pools and applies schema migrations for
-// services that store data in Postgres. Each service owns its own database.
+// Package postgres opens connection pools and applies schema migrations. Each
+// module owns its own schema in the habbyte database.
 package postgres
 
 import (
@@ -83,8 +83,8 @@ func IsUniqueViolation(err error, constraint string) bool {
 }
 
 // IsUnavailable reports whether err means the database could not be reached
-// or the statement was never sent, so the caller may retry later. Services
-// map it to codes.Unavailable instead of Internal.
+// or the statement was never sent, so the caller may retry later. The API
+// maps it to 503 instead of 500.
 func IsUnavailable(err error) bool {
 	var connectErr *pgconn.ConnectError
 	return errors.As(err, &connectErr) || pgconn.SafeToRetry(err) || pgconn.Timeout(err)

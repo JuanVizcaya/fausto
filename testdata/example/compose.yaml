@@ -1,135 +1,66 @@
-name: core-services
+name: habbyte
 
-# Compose services kept by their owning agent.
-#include:
-#  - deploy/compose/administrators.yaml
-
-# Settings shared by every Go service.
-x-go-service: &go-service
-  read_only: true
-  tmpfs:
-    - /tmp:size=64m,uid=65532,gid=65532,mode=0700
-  deploy:
-    resources:
-      limits:
-        cpus: "1"
-        memory: 256M
-  cap_drop:
-    - ALL
-  security_opt:
-    - no-new-privileges:true
-  stop_grace_period: 15s
-  healthcheck:
-    test: ["CMD", "/service", "healthcheck"]
-    interval: 10s
-    timeout: 5s
-    start_period: 5s
-    retries: 3
+# The MVP runtime: Caddy in front, one backend binary with every module,
+# Keycloak, and Postgres holding the habbyte and keycloak databases. Only Caddy
+# is published; Keycloak's admin console listens on a loopback port.
 
 services:
-  # =========================================================================
-  # PostgreSQL Database (v17 / v18 supported by Keycloak 26+)
-  # =========================================================================
-  postgres:
-    image: postgres:17-alpine
-    container_name: postgres-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak_db_password
+  caddy:
+    image: caddy:2.11.6-alpine
     ports:
-      - "5432:5432"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      API_HOST: ${API_HOST:-api.localhost}
+      AUTH_HOST: ${AUTH_HOST:-auth.localhost}
+      # Caddy fails on an empty value, so keep the Caddyfile's default here.
+      ACME_EMAIL: ${ACME_EMAIL:-admin@habbyte.localhost}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and the local CA; keep them to stay under Let's Encrypt
+      # rate limits.
+      - caddy-data:/data
+      - caddy-config:/config
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  # =========================================================================
-  # Keycloak IAM Server (Latest Stable 26.x)
-  # =========================================================================
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.8.0
-    container_name: keycloak-server
-    restart: unless-stopped
-    command: start-dev
-    environment:
-      KC_DB: postgres
-      KC_DB_URL_HOST: postgres
-      KC_DB_URL_PORT: 5432
-      KC_DB_URL_DATABASE: keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak_db_password
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin_password
-      KC_HTTP_ENABLED: "true"
-      KC_HOSTNAME_STRICT: "false"
-    ports:
-      - "9000:8080"
+      # The admin API listens only inside the container.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     depends_on:
-      postgres:
+      backend:
         condition: service_healthy
-    networks:
-      - app-network
+      keycloak:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
-  # =========================================================================
-  # API gateway: HTTP/JSON for the browser, gRPC to domain services
-  # =========================================================================
-  api:
-    <<: *go-service
-    build:
-      context: ./backend
-      args:
-        SERVICE: api
-    ports:
-      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
-    expose:
-      - "9090"
-    environment:
-      HTTP_ADDR: ":8080"
-      GRPC_ADDR: ":9090"
-      SHUTDOWN_TIMEOUT: "10s" # keep below stop_grace_period
-      RESIDENTS_ADDR: "dns:///residents:9090"
-    depends_on:
-      residents:
-        condition: service_healthy
-
-  residents:
-    <<: *go-service
-    build:
-      context: ./backend
-      args:
-        SERVICE: residents
-    # Internal only: gRPC on 9090 for other services; HTTP 8080 serves probes.
-    expose:
-      - "9090"
-    environment:
-      HTTP_ADDR: ":8080"
-      GRPC_ADDR: ":9090"
-      SHUTDOWN_TIMEOUT: "10s"
-      DATABASE_URL: "postgres://residents:${RESIDENTS_DB_PASSWORD:-residents}@residents-db:5432/residents?sslmode=disable&pool_max_conns=10"
-    depends_on:
-      residents-db:
-        condition: service_healthy
-
-  # Each service owns its database; only residents connects to this one.
-  residents-db:
+  postgres:
     image: postgres:18
     environment:
-      POSTGRES_DB: residents
-      POSTGRES_USER: residents
-      POSTGRES_PASSWORD: ${RESIDENTS_DB_PASSWORD:-residents}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      HABBYTE_DB_PASSWORD: ${HABBYTE_DB_PASSWORD:-habbyte}
+      KEYCLOAK_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       # Postgres 18 images keep data under /var/lib/postgresql/<major>/.
-      - residents-db:/var/lib/postgresql
-      - ./deploy/postgres/residents-init.sql:/docker-entrypoint-initdb.d/residents-init.sql:ro
+      - postgres:/var/lib/postgresql
+      - ./deploy/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U residents -d residents"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d habbyte"]
       interval: 5s
       timeout: 3s
       start_period: 10s
@@ -137,46 +68,76 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 2G
 
-  # Fausto, for reviewing and proposing changes to system/, run against
-  # this clone. Start it with:
-  #   docker compose --profile fausto up --build fausto
-  # Set FAUSTO_AUTHOR in .env so proposal commits carry your name.
-  fausto:
-    profiles: ["fausto"]
-    build:
-      context: ./fausto
-    ports:
-      - "127.0.0.1:${FAUSTO_PORT:-7070}:7070"
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.0
+    command: start-dev
     environment:
-      FAUSTO_AUTHOR: ${FAUSTO_AUTHOR:-}
-      FAUSTO_BASE: ${FAUSTO_BASE:-}
-      FAUSTO_JIRA_URL: ${FAUSTO_JIRA_URL:-}
-      FAUSTO_JIRA_EMAIL: ${FAUSTO_JIRA_EMAIL:-}
-      FAUSTO_JIRA_TOKEN: ${FAUSTO_JIRA_TOKEN:-}
-      FAUSTO_JIRA_PROJECT: ${FAUSTO_JIRA_PROJECT:-}
-      FAUSTO_JIRA_ISSUE_TYPE: ${FAUSTO_JIRA_ISSUE_TYPE:-}
-      FAUSTO_JIRA_STATUSES: ${FAUSTO_JIRA_STATUSES:-}
-      # Proposals and tasks live in MongoDB (fausto/compose.yaml runs one on
-      # the host). Inside this container the host is host.docker.internal,
-      # not localhost; set FAUSTO_CONTAINER_MONGO_URI for a shared database
-      # elsewhere.
-      FAUSTO_MONGO_URI: ${FAUSTO_CONTAINER_MONGO_URI:-mongodb://fausto:${FAUSTO_MONGO_PASSWORD:-}@host.docker.internal:${FAUSTO_MONGO_PORT:-27017}/?authSource=admin}
-      FAUSTO_MONGO_DB: ${FAUSTO_MONGO_DB:-}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Files fausto writes (accepted proposals' commits) belong to you.
-    user: "${FAUSTO_UID:-1000}:${FAUSTO_GID:-1000}"
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin_password
+      KC_HTTP_ENABLED: "true"
+      # Behind Caddy: the issuer is the public URL, and the admin console
+      # answers only on the loopback port.
+      KC_PROXY_HEADERS: xforwarded
+      KC_HOSTNAME: https://${AUTH_HOST:-auth.localhost}
+      KC_HOSTNAME_ADMIN: http://localhost:9000
+      # Health endpoints on the management port, which stays inside the
+      # container.
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "127.0.0.1:9000:8080"
+    healthcheck:
+      # The image has no curl or wget, so ask bash to speak HTTP.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q 'HTTP/1.1 200' <&3"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        SERVICE: habbyte
+    # Not published: reachable only through Caddy.
+    expose:
+      - "8080"
+    environment:
+      HTTP_ADDR: ":8080"
+      SHUTDOWN_TIMEOUT: "10s" # keep below stop_grace_period
     read_only: true
     tmpfs:
-      - /tmp:size=256m,mode=1777
+      - /tmp:size=64m,uid=65532,gid=65532,mode=0700
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    volumes:
-      - .:/repo
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "/service", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
 
   # Runs the Go tests, including Postgres integration tests:
   #   docker compose --profile test run --rm --build test
@@ -187,21 +148,17 @@ services:
       target: development
     command: ["sh", "-c", "go vet ./... && go test -race -count=1 ./..."]
     environment:
-      TEST_DATABASE_URL: "postgres://residents:${RESIDENTS_DB_PASSWORD:-residents}@residents-db:5432/residents_test?sslmode=disable"
+      TEST_DATABASE_URL: "postgres://habbyte:${HABBYTE_DB_PASSWORD:-habbyte}@postgres:5432/habbyte_test?sslmode=disable"
     volumes:
       - go-mod:/go/pkg/mod
       - go-build:/root/.cache/go-build
     depends_on:
-      residents-db:
+      postgres:
         condition: service_healthy
 
-networks:
-  app-network:
-    driver: bridge
-
 volumes:
-  residents-db:
+  caddy-data:
+  caddy-config:
+  postgres:
   go-mod:
   go-build:
-  postgres_data:
-    driver: local

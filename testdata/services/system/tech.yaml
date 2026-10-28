@@ -1,0 +1,43 @@
+# Technology radar. status: adopt (default choice), trial (in limited use),
+# assess (worth exploring), hold (do not start new work with it).
+technologies:
+  - id: go
+    name: Go
+    category: language
+    status: adopt
+    notes: All backend services and shared libraries.
+  - id: grpc
+    name: gRPC + Protocol Buffers
+    category: protocol
+    status: adopt
+    notes: Service-to-service calls. Contracts live in proto/ and are linted with buf.
+  - id: http-json
+    name: HTTP/JSON
+    category: protocol
+    status: adopt
+    notes: Public API at the gateway only; browser types are hand-written.
+  - id: postgres
+    name: PostgreSQL 18
+    category: datastore
+    status: trial
+    notes: Chosen for now; always behind a store interface (see ADR 0001).
+  - id: goose
+    name: goose
+    category: library
+    status: adopt
+    notes: Embedded SQL migrations applied on service startup.
+  - id: react
+    name: React
+    category: framework
+    status: assess
+    notes: Planned frontend.
+  - id: docker-compose
+    name: Docker Compose
+    category: infrastructure
+    status: adopt
+    notes: Local runtime and integration tests.
+  - id: keycloak
+    name: Keycloak
+    category: infrastructure
+    status: assess
+    notes: Planned identity provider; residents already store keycloakSub.

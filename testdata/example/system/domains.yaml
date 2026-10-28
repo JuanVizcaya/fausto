@@ -1,27 +1,69 @@
-# Bounded contexts and shared vocabulary.
+# Bounded contexts, grouped by the products they serve, and shared vocabulary.
 domains:
-  - id: residents
-    name: Residents
-    description: People who live in or are linked to units.
-    components: [residents, residents-db]
+  - id: administration
+    name: Administración
+    description: Developments, their structure and governance, and who may do what in each.
+    components: [developments, iam]
     status: active
-  - id: properties
-    name: Properties
-    description: Complexes, buildings, and units.
-    status: planned
-  - id: billing
-    name: Billing
-    description: Fees, invoices, and payments.
-    status: planned
-  - id: maintenance
-    name: Maintenance
-    description: Requests, work orders, and vendors.
-    status: planned
+  - id: control
+    name: Control
+    description: Habbyte's own clients, plans and subscriptions, and support access.
+    components: [control]
+    status: active
+  - id: finance
+    name: Finanzas
+    description: Charges, the ledger, payments through providers, and CFDI invoicing.
+    components: [finance, payments, invoicing]
+    status: active
+  - id: community
+    name: Comunidad
+    description: Announcements and documents.
+    components: [community]
+    status: active
+  - id: amenities
+    name: Amenidades
+    description: Amenity reservations and their rules.
+    components: [amenities]
+    status: active
+  - id: services
+    name: Servicios
+    description: Maintenance and cleaning tasks, with evidence and validation.
+    components: [operations]
+    status: active
+  - id: access
+    name: Acceso físico
+    description: Credentials, access policies and the devices at the gates.
+    components: [accesscontrol, devices]
+    status: active
+  - id: residents
+    name: Residentes
+    description: The resident app. It needs no module of its own; the API composes it from developments, finance, community and amenities.
+    components: [api]
+    status: active
+  - id: shared
+    name: Shared capabilities
+    description: Capabilities every product uses, mostly by reacting to events.
+    components: [notifications, files, audit]
+    status: active
 
 glossary:
-  - term: Tenant
-    definition: A management company or complex that uses Habbyte. Every record is scoped to one tenant.
+  - term: Development
+    definition: A residential condominium (desarrollo), and the tenant. Every tenant row carries its development_id.
+  - term: Organization
+    definition: A management company that groups developments.
   - term: Unit
-    definition: An apartment or other space within a complex.
-  - term: Resident
-    definition: A person who lives in or is linked to a unit.
+    definition: An apartment, house or other space within a development.
+  - term: Occupancy
+    definition: A person's link to a unit as owner, tenant or staff, valid from one date to another.
+  - term: Grant
+    definition: A role a user holds in a development, optionally for one unit, with its validity and source (manual, occupancy or governance). Only its source can remove it.
+  - term: Committee
+    definition: A development's elected residents (comité), whose governance grants the admin cannot remove.
+  - term: CFDI
+    definition: Mexico's electronic invoice (Comprobante Fiscal Digital por Internet), version 4.0.
+  - term: PAC
+    definition: An authorized certification provider that stamps CFDI.
+  - term: CSD
+    definition: The issuer's signing certificate (Certificado de Sello Digital).
+  - term: Contract
+    definition: A module's Go package of interfaces and plain structs, the only package other modules import.

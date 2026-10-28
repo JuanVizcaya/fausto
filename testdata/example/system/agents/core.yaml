@@ -1,0 +1,15 @@
+id: core
+name: Core agent
+kind: agent
+scope: 'The core modules every product depends on: iam, developments and control.'
+owns:
+  - backend/internal/modules/iam/
+  - backend/internal/modules/developments/
+  - backend/internal/modules/control/
+rules:
+  - Import only internal/platform, other modules' contract packages, and your own module's packages; internal/archtest enforces it.
+  - A contract takes and returns plain structs it defines, never domain types, so every call can later become gRPC.
+  - Keep your module's tables in its own schema. No joins or foreign keys across schemas; refer to other modules' records by id.
+  - Add schema changes as new numbered goose migrations in migrations/; never edit an applied one.
+  - Publish and consume only events declared in system/events.yaml.
+  - Names, emails and phones live only in iam; other modules store account ids.

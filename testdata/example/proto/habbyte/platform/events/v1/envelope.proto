@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package habbyte.platform.events.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+// Envelope wraps every event a module writes to its outbox. Delivery is at
+// least once and unordered, so consumers deduplicate by event_id.
+message Envelope {
+  // UUIDv7 of the event.
+  string event_id = 1;
+  // Event type, such as "developments.occupancy-ended".
+  string type = 2;
+  // The development (tenant) the event belongs to.
+  string development_id = 3;
+  // Account that caused the event; empty for system jobs.
+  string actor_id = 4;
+  google.protobuf.Timestamp occurred_at = 5;
+  // The module's event message, from proto/habbyte/<module>/events/v1.
+  google.protobuf.Any payload = 6;
+}

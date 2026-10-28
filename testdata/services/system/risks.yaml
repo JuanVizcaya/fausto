@@ -1,0 +1,82 @@
+# Risk register. Severity is likelihood × impact (low 1, medium 2, high 3);
+# risks of severity 6 or more need a mitigation unless closed.
+risks:
+  - id: unauthenticated-api
+    title: The public API has no authentication
+    description: Anyone who can reach the gateway can read and create residents for any tenant, because the tenant comes from the URL path and requests are not authenticated.
+    category: security
+    likelihood: high
+    impact: high
+    status: open
+    owner: gateway
+    mitigation: Keep the gateway bound to localhost. Keycloak token validation, with the tenant taken from the token, is an exit criterion of Public API v1.
+    components: [api]
+    milestones: [public-api-v1]
+    requirements: [tenant-isolation]
+
+  - id: no-backups
+    title: Residents data is not backed up
+    description: Losing the residents-db volume loses every resident. There is no backup job and no tested restore.
+    category: operational
+    likelihood: medium
+    impact: high
+    status: open
+    owner: platform
+    mitigation: Add a scheduled pg_dump with off-host storage and run a restore drill before any production data is stored.
+    components: [residents-db]
+    requirements: [backups]
+
+  - id: no-remote
+    title: The repository exists on one machine only
+    description: The repository has no remote, so a lost or broken laptop loses all work, and teammates cannot share proposals and tasks.
+    category: delivery
+    likelihood: medium
+    impact: high
+    status: open
+    owner: orchestrator
+    mitigation: Add a GitHub remote and push main; then let CI run the fausto checks on pull requests.
+
+  - id: properties-critical-path
+    title: Properties MVP blocks three milestones
+    description: Billing, maintenance, and full residents support all need units from the properties service, which does not exist yet.
+    category: delivery
+    likelihood: medium
+    impact: medium
+    status: open
+    owner: orchestrator
+    mitigation: Start Properties MVP next and keep its scope to complexes, buildings, and units.
+    milestones: [properties-mvp, billing-mvp, maintenance-mvp]
+
+  - id: datastore-may-change
+    title: Postgres may not be the long-term datastore
+    description: The database choice is provisional, so storage code could need rewriting.
+    category: technical
+    likelihood: medium
+    impact: low
+    status: accepted
+    owner: residents
+    mitigation: Persistence sits behind store interfaces, so a change means a new store implementation.
+    components: [residents, residents-db]
+    decisions: ["0001"]
+
+  - id: shared-workflow-db-open
+    title: Anyone with the workflow database's URI can change proposals and tasks
+    description: fausto has no login; whoever holds FAUSTO_MONGO_URI (in developers' and agents' .env files) can create, accept, or reject proposals' records and change any task's status directly in the database.
+    category: security
+    likelihood: low
+    impact: medium
+    status: accepted
+    owner: tooling
+    mitigation: Bind the database to localhost or a private network, give it a password kept only in .env files, and never commit .env.
+    decisions: ["0004"]
+
+  - id: workflow-db-loss
+    title: Losing the workflow database loses proposals and task history
+    description: Proposals, tasks, and who changed their status live only in MongoDB. Losing its volume loses them; the spec changes themselves stay in git, and Jira keeps a copy of each task's .md.
+    category: operational
+    likelihood: low
+    impact: high
+    status: open
+    owner: tooling
+    mitigation: Back up the fausto-mongo volume (mongodump) on a schedule, or use a hosted MongoDB with backups.
+    decisions: ["0004"]

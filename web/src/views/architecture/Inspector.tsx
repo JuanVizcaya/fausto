@@ -347,11 +347,13 @@ function ComponentDetail({
             </dd>
           </>
         )}
-        {(c.runtime?.cmd || c.runtime?.compose) && (
+        {(c.runtime?.cmd || c.runtime?.compose || c.runtime?.host || c.runtime?.image) && (
           <>
             <dt>Runtime</dt>
             <dd>
+              {c.runtime.host && <div>runs in <a href={`#/architecture/${c.runtime.host}`}>{c.runtime.host}</a></div>}
               {c.runtime.cmd && <div>command <Code>{c.runtime.cmd}</Code></div>}
+              {c.runtime.image && <div>image <Code>{c.runtime.image}</Code></div>}
               {c.runtime.compose && <div>compose service <Code>{c.runtime.compose}</Code></div>}
             </dd>
           </>
@@ -359,7 +361,14 @@ function ComponentDetail({
         {!!c.contracts?.length && (
           <>
             <dt>Contracts</dt>
-            <dd>{c.contracts.map((ct) => <div key={ct.proto}><Code>{ct.proto}</Code></div>)}</dd>
+            <dd>
+              {c.contracts.map((ct) => (
+                <div key={ct.proto ?? ct.go}>
+                  <Code>{ct.proto ?? ct.go}</Code>
+                  {ct.go && <span className="muted"> Go</span>}
+                </div>
+              ))}
+            </dd>
           </>
         )}
         {!!c.data?.length && (
@@ -381,7 +390,7 @@ function ComponentDetail({
             <dd>
               {c.depends_on.map((d) => (
                 <div key={d.target}>
-                  <a href={`#/architecture/${d.target}`}>{d.target}</a> <span className="muted">via {d.protocol}</span>
+                  <a href={`#/architecture/${d.target}`}>{d.target}</a> <span className="muted">via {d.protocol}{d.schema && `, schema ${d.schema}`}</span>
                 </div>
               ))}
             </dd>

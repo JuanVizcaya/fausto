@@ -1,7 +1,7 @@
 ---
 id: "0004"
 title: Proposals and tasks live in a shared MongoDB, mirrored to Jira
-status: accepted
+status: superseded
 date: 2026-10-13
 ---
 

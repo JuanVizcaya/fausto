@@ -1,9 +1,9 @@
 ---
 id: "0002"
 title: gRPC between services, HTTP/JSON at the edge
-status: accepted
+status: superseded
 date: 2026-10-02
-affects: [api, residents, web]
+affects: [api, web]
 ---
 
 ## Context

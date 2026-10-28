@@ -46,18 +46,21 @@
             "additionalProperties": false,
             "properties": {
               "cmd": {"type": "string", "description": "Directory of the Go main package."},
-              "compose": {"type": "string", "description": "Service name in compose.yaml."}
+              "compose": {"type": "string", "description": "Service name in compose.yaml."},
+              "host": {"$ref": "#/$defs/id", "description": "Component whose process this one runs in, such as a module in a modular monolith's binary."},
+              "image": {"type": "string", "description": "Upstream container image the component runs, without a tag, for one built from no code in the repository."}
             }
           },
           "contracts": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["proto"],
+              "oneOf": [{"required": ["proto"]}, {"required": ["go"]}],
               "additionalProperties": false,
               "properties": {
                 "proto": {"type": "string", "pattern": "^proto/.+/v[0-9]+$"},
-                "generated": {"type": "string"}
+                "generated": {"type": "string"},
+                "go": {"type": "string", "description": "Go package of interfaces that components in the same process call (a contract dependency)."}
               }
             }
           },
@@ -81,7 +84,8 @@
               "additionalProperties": false,
               "properties": {
                 "target": {"$ref": "#/$defs/id"},
-                "protocol": {"enum": ["http", "grpc", "sql", "library"], "description": "Events are declared in events.yaml, not as dependencies."},
+                "protocol": {"enum": ["http", "grpc", "sql", "library", "contract"], "description": "contract: an in-process call through the target's Go contract. Events are declared in events.yaml, not as dependencies."},
+                "schema": {"$ref": "#/$defs/id", "description": "For sql: the schema, or database, this component owns on a database server that several components share."},
                 "description": {"type": "string"}
               }
             }

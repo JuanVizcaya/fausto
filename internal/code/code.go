@@ -71,7 +71,7 @@ type Import struct {
 	Dir       string `json:"dir"`
 	Component string `json:"component,omitempty"`
 	// Kind is "same" (the same component), "contract" (another
-	// component's generated contract), "library" (a library component),
+	// component's generated or Go contract), "library" (a library component),
 	// or "other".
 	Kind string `json:"kind"`
 }
@@ -246,7 +246,9 @@ func (a *Analyzer) Analyze(component string) (*Model, error) {
 	}
 	m := ix.model(component)
 	for _, ct := range c.Contracts {
-		m.Contracts = append(m.Contracts, readContract(repo, ct.Proto, ct.Generated))
+		if ct.Proto != "" {
+			m.Contracts = append(m.Contracts, readContract(repo, ct.Proto, ct.Generated))
+		}
 	}
 	return m, nil
 }

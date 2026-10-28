@@ -10,8 +10,11 @@ import (
 
 // checkLayers parses the imports of every Go file that belongs to a
 // component and verifies each import of another component:
-//   - a generated contract needs a grpc dependency on the contract's owner;
+//   - a generated contract needs a grpc dependency on the contract's owner,
+//     or a library dependency when a library owns it;
+//   - a Go contract needs a contract dependency on its owner;
 //   - a library's code needs a library dependency on it;
+//   - a host may import the root package of each component it runs;
 //   - any other component's code may not be imported at all.
 //
 // Layer rules for the declared dependencies themselves are checked by the
@@ -51,6 +54,14 @@ func checkLayers(r *Repo) []Finding {
 			if owner, ct := r.contractOwner(dir); owner != nil {
 				switch {
 				case owner.ID == from.ID:
+				case ct.Go != "":
+					if !from.Uses(owner.ID, "contract") {
+						out = append(out, Finding{
+							Message:   fmt.Sprintf("imports the %q contract (%s) without declaring a contract dependency on %q", owner.ID, imp, owner.ID),
+							Component: from.ID, Path: f,
+						})
+					}
+				case owner.Kind == "library" && from.Uses(owner.ID, "library"):
 				case r.isEventContract(owner, ct):
 					if !r.Spec.Consumes(from.ID, owner.ID) {
 						out = append(out, Finding{
@@ -71,6 +82,7 @@ func checkLayers(r *Repo) []Finding {
 			case to == nil:
 				out = append(out, Finding{Message: fmt.Sprintf("imports %s, which belongs to no declared component", imp), Component: from.ID, Path: f})
 			case to.ID == from.ID:
+			case to.Runtime.Host == from.ID && len(to.Paths) > 0 && dir == to.Paths[0]:
 			case to.Kind == "library":
 				if !from.Uses(to.ID, "library") {
 					out = append(out, Finding{

@@ -1,0 +1,15 @@
+id: access
+name: Access agent
+kind: agent
+scope: 'Physical access: accesscontrol and devices, with the vendor adapters.'
+owns:
+  - backend/internal/modules/accesscontrol/
+  - backend/internal/modules/devices/
+rules:
+  - Import only internal/platform, other modules' contract packages, and your own module's packages; internal/archtest enforces it.
+  - A contract takes and returns plain structs it defines, never domain types, so every call can later become gRPC.
+  - Keep your module's tables in its own schema. No joins or foreign keys across schemas; refer to other modules' records by id.
+  - Add schema changes as new numbered goose migrations in migrations/; never edit an applied one.
+  - Publish and consume only events declared in system/events.yaml.
+  - 'Habbyte is never in a door''s critical path: credentials live on devices or with the vendor, and Habbyte only syncs them.'
+  - Never store biometric templates; keep only the vendor's enrollment id and the person's consent.

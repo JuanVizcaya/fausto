@@ -1,0 +1,16 @@
+id: finance
+name: Finance agent
+kind: agent
+scope: 'Money and fiscal modules: finance, payments and invoicing, with their provider adapters.'
+owns:
+  - backend/internal/modules/finance/
+  - backend/internal/modules/payments/
+  - backend/internal/modules/invoicing/
+rules:
+  - Import only internal/platform, other modules' contract packages, and your own module's packages; internal/archtest enforces it.
+  - A contract takes and returns plain structs it defines, never domain types, so every call can later become gRPC.
+  - Keep your module's tables in its own schema. No joins or foreign keys across schemas; refer to other modules' records by id.
+  - Add schema changes as new numbered goose migrations in migrations/; never edit an applied one.
+  - Publish and consume only events declared in system/events.yaml.
+  - Ledger entries are append-only; correct a charge or payment with a reversing entry.
+  - Provider SDKs stay under adapters/; the rest of the module sees only its port.

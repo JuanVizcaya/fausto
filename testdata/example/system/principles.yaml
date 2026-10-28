@@ -1,37 +1,58 @@
 # Implementation principles every agent follows. `checks` names the
 # `fausto check` checks that enforce a principle; principles without checks
-# are reviewed by hand.
+# are reviewed by hand. Habbyte's own tests enforce some too, as noted.
 principles:
-  - id: service-owns-data
-    title: Each service owns its database
-    rationale: Services never read another service's tables, so each can change its schema and storage independently.
-    checks: [db-ownership]
   - id: declared-architecture
     title: Code matches the declared architecture
-    rationale: system/ is the source of truth; every service, contract, and dependency is declared there before it is built.
+    rationale: The spec is the source of truth; every module, contract, and dependency is declared before it is built, and the binary registers every module it declares.
     checks: [schema, services, contracts]
-  - id: layered-dependencies
-    title: Dependencies follow the layers
-    rationale: Edge calls domain, domain calls data, and everything may use platform. Domain services never import each other's code; they talk over gRPC contracts.
+  - id: module-owns-schema
+    title: Each module owns its schema
+    rationale: A module's tables live in its own Postgres schema, and no other module reads them. No joins or foreign keys across schemas, so moving a module to its own database means moving one schema. Per-module database roles enforce it from M0.
+    checks: [db-ownership]
+  - id: contracts-only
+    title: Modules meet only through contracts
+    rationale: A module imports the platform, other modules' contract packages, and its own packages, nothing else, and the edge reaches modules only through contracts. Today a call is an in-process function call; after an extraction, the same interface is a gRPC client. internal/archtest enforces it in go test too.
     checks: [layers]
-  - id: versioned-contracts
-    title: Contracts are versioned and never broken
-    rationale: Never change the meaning of an existing protobuf field number; breaking changes go in a new v2 package.
+  - id: serializable-contracts
+    title: Contracts take and return plain structs
+    rationale: A contract method uses only types its contract package defines, never domain types, so every call can become a network call without changing its callers.
+  - id: one-public-api
+    title: One public API at the edge
+    rationale: The API serves HTTP/JSON under /v1 with hand-written types, holds sessions, and composes screens. Clients never see internal contracts, so each side can change without breaking the other.
+  - id: events-declared-versioned
+    title: Side effects travel as declared, versioned events
+    rationale: A module writes its change and its event in one transaction (outbox). Every event is declared in events.yaml and defined in a versioned protobuf package; breaking changes go in a new package version.
     checks: [contracts]
+  - id: development-is-tenant
+    title: The development is the tenant everywhere
+    rationale: Every tenant row carries development_id. The application checks grants, and Postgres row-level security checks again.
+  - id: append-only-money-and-audit
+    title: Money and audit are append-only
+    rationale: Ledger and audit entries are never updated or deleted; a correction is a new, reversing entry, so the committee can always see what changed and who changed it.
+  - id: providers-behind-ports
+    title: Every external provider sits behind a port
+    rationale: Mercado Pago, the PAC, IoT vendors, email, push and storage each have an interface and an adapter under the module's adapters/, so a second provider is a new adapter.
+  - id: never-in-door-critical-path
+    title: Habbyte is never in a door's critical path
+    rationale: Credentials live on devices or with the vendor, and Habbyte only syncs them, so doors keep working when Habbyte is down.
   - id: storage-behind-interfaces
     title: Persistence sits behind store interfaces
-    rationale: Changing databases only means adding another store implementation (ADR 0001).
-  - id: gateway-owns-public-api
-    title: The gateway owns the public API
-    rationale: Browser JSON types are hand-written in the gateway so the public API can evolve independently of internal contracts.
+    rationale: Each module reaches Postgres only through its store package, so changing databases means another store implementation (ADR 0001).
+  - id: expand-then-contract
+    title: Migrations expand, then contract
+    rationale: The previous image always runs against the new schema, so a rollback is redeploying the previous tag.
+  - id: no-personal-data-in-logs
+    title: No personal data in logs
+    rationale: Logs carry request, development, user and module ids, never names, emails, phones or document contents (LFPDPPP).
   - id: request-ids
     title: Every request carries a request ID
-    rationale: X-Request-ID is forwarded as x-request-id gRPC metadata and logged by every service, so one request can be traced across services.
+    rationale: X-Request-ID is kept or assigned at the edge, put in the context, and logged, so one request can be traced through every module.
   - id: clear-ownership
     title: Every file has exactly one owning agent
     rationale: Agents work in parallel without stepping on each other; changes outside an agent's paths need the owner's review.
     checks: [ownership, agents]
   - id: secure-runtime
-    title: Services run hardened and bounded
-    rationale: Containers have health checks, memory limits, least privilege, and no public ports unless they are the edge, as required in requirements.yaml.
+    title: Containers run hardened and bounded
+    rationale: Containers have health checks, memory limits, least privilege, and no ports beyond loopback unless they are the edge, as required in requirements.yaml.
     checks: [runtime]

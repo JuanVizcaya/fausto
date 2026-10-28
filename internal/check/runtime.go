@@ -46,11 +46,30 @@ var runtimeRules = map[string]func(s composeService, c *spec.Component) string{
 		return ""
 	},
 	"exposure": func(s composeService, c *spec.Component) string {
-		if c.Layer != "edge" && len(s.Ports) > 0 {
-			return fmt.Sprintf("publishes ports but is in the %s layer; only edge components may", c.Layer)
+		if c.Layer != "edge" && slices.ContainsFunc(s.Ports, publicPort) {
+			return fmt.Sprintf("publishes ports beyond loopback but is in the %s layer; only edge components may", c.Layer)
 		}
 		return ""
 	},
+}
+
+// publicPort reports whether a compose ports entry, short ("8080",
+// "127.0.0.1:5432:5432") or long ({target, host_ip}), publishes on an
+// address other hosts can reach.
+func publicPort(p any) bool {
+	var ip string
+	switch p := p.(type) {
+	case map[string]any:
+		ip, _ = p["host_ip"].(string)
+	case string:
+		p, _, _ = strings.Cut(p, "/")
+		if strings.HasPrefix(p, "[") {
+			ip, _, _ = strings.Cut(strings.TrimPrefix(p, "["), "]")
+		} else if parts := strings.Split(p, ":"); len(parts) == 3 {
+			ip = parts[0]
+		}
+	}
+	return ip != "127.0.0.1" && ip != "::1" && ip != "localhost"
 }
 
 // RuntimeRules lists the rule names usable in verified_by: runtime/<rule>.

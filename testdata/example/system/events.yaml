@@ -1,13 +1,301 @@
-# Asynchronous events between services. Each event has one producer and is
+# Asynchronous events between modules. Each event has one producer and is
 # defined by a protobuf message in a versioned package, which must be a
-# contract of the producer in system.yaml once the event is active. Breaking
-# changes go in a new package version, as with gRPC contracts.
+# contract of the producer in system.yaml once the event is active. Events
+# are wrapped in habbyte.platform.events.v1.Envelope and delivered at least
+# once through each module's outbox, so consumers are idempotent and don't
+# rely on order. Audit also records every event marked auditable.
 events:
-  - id: residents.resident-registered
-    title: Resident registered
-    description: A resident was linked to a unit. Billing uses it to start charging the unit's fees; maintenance uses it to know who may report problems.
+  - id: iam.invitation-accepted
+    title: Invitation accepted
+    description: A person accepted an invitation and has an account.
     status: planned
-    producer: residents
-    message: habbyte.residents.events.v1.ResidentRegistered
-    key: tenant_id
+    producer: iam
+    message: habbyte.iam.events.v1.InvitationAccepted
+    key: development_id
+    delivery: at-least-once
+  - id: iam.grant-changed
+    title: Grant changed
+    description: A role was granted or removed in a development. Access control syncs credentials from it.
+    status: planned
+    producer: iam
+    consumers: [accesscontrol]
+    message: habbyte.iam.events.v1.GrantChanged
+    key: development_id
+    delivery: at-least-once
+  - id: developments.occupancy-started
+    title: Occupancy started
+    description: A person was linked to a unit. iam derives grants from it, and access control issues credentials.
+    status: planned
+    producer: developments
+    consumers: [iam, accesscontrol, community]
+    message: habbyte.developments.events.v1.OccupancyStarted
+    key: development_id
+    delivery: at-least-once
+  - id: developments.occupancy-ended
+    title: Occupancy ended
+    description: A person's link to a unit ended. iam removes the grants it gave, and access control revokes credentials.
+    status: planned
+    producer: developments
+    consumers: [iam, accesscontrol, community]
+    message: habbyte.developments.events.v1.OccupancyEnded
+    key: development_id
+    delivery: at-least-once
+  - id: developments.committee-changed
+    title: Committee changed
+    description: A development's committee changed. iam derives governance grants from it.
+    status: planned
+    producer: developments
+    consumers: [iam, community]
+    message: habbyte.developments.events.v1.CommitteeChanged
+    key: development_id
+    delivery: at-least-once
+  - id: developments.admin-assigned
+    title: Admin assigned
+    description: A development got a new admin. iam grants the admin role.
+    status: planned
+    producer: developments
+    consumers: [iam]
+    message: habbyte.developments.events.v1.AdminAssigned
+    key: development_id
+    delivery: at-least-once
+  - id: developments.status-changed
+    title: Development status changed
+    description: A development went live, was suspended, or closed.
+    status: planned
+    producer: developments
+    consumers: [iam]
+    message: habbyte.developments.events.v1.StatusChanged
+    key: development_id
+    delivery: at-least-once
+  - id: control.plan-changed
+    title: Plan changed
+    description: The products enabled for a development changed.
+    status: planned
+    producer: control
+    consumers: [developments]
+    message: habbyte.control.events.v1.PlanChanged
+    key: development_id
+    delivery: at-least-once
+  - id: control.access-granted
+    title: Support access granted
+    description: A break-glass request was approved, granting support read-only access for at most 24 hours.
+    status: planned
+    producer: control
+    consumers: [iam]
+    message: habbyte.control.events.v1.AccessGranted
+    key: development_id
+    delivery: at-least-once
+  - id: finance.charge-posted
+    title: Charge posted
+    description: A charge was posted to a unit's ledger.
+    status: planned
+    producer: finance
+    consumers: [notifications]
+    message: habbyte.finance.events.v1.ChargePosted
+    key: development_id
+    delivery: at-least-once
+  - id: finance.payment-applied
+    title: Payment applied
+    description: A payment was posted and allocated to charges. Invoicing issues a CFDI, and notifications sends the receipt.
+    status: planned
+    producer: finance
+    consumers: [invoicing, notifications]
+    message: habbyte.finance.events.v1.PaymentApplied
+    key: development_id
+    delivery: at-least-once
+  - id: finance.unit-delinquency-changed
+    title: Unit delinquency changed
+    description: A unit became delinquent or current. Amenities may restrict reservations if a policy says so.
+    status: planned
+    producer: finance
+    consumers: [amenities, notifications]
+    message: habbyte.finance.events.v1.UnitDelinquencyChanged
+    key: development_id
+    delivery: at-least-once
+  - id: finance.report-reviewed
+    title: Report reviewed
+    description: The committee reviewed a financial report.
+    status: planned
+    producer: finance
+    message: habbyte.finance.events.v1.ReportReviewed
+    key: development_id
+    delivery: at-least-once
+  - id: payments.payment-succeeded
+    title: Payment succeeded
+    description: A provider confirmed a payment. Finance posts and allocates it.
+    status: planned
+    producer: payments
+    consumers: [finance]
+    message: habbyte.payments.events.v1.PaymentSucceeded
+    key: development_id
+    delivery: at-least-once
+  - id: payments.payment-failed
+    title: Payment failed
+    description: A provider payment failed.
+    status: planned
+    producer: payments
+    consumers: [notifications]
+    message: habbyte.payments.events.v1.PaymentFailed
+    key: development_id
+    delivery: at-least-once
+  - id: payments.refunded
+    title: Payment refunded
+    description: A provider payment was refunded.
+    status: planned
+    producer: payments
+    consumers: [finance]
+    message: habbyte.payments.events.v1.Refunded
+    key: development_id
+    delivery: at-least-once
+  - id: invoicing.cfdi-issued
+    title: CFDI issued
+    description: A CFDI was stamped by the PAC.
+    status: planned
+    producer: invoicing
+    consumers: [notifications]
+    message: habbyte.invoicing.events.v1.CfdiIssued
+    key: development_id
+    delivery: at-least-once
+  - id: invoicing.cfdi-failed
+    title: CFDI failed
+    description: Stamping a CFDI failed after its retries; the admin is alerted.
+    status: planned
+    producer: invoicing
+    consumers: [notifications]
+    message: habbyte.invoicing.events.v1.CfdiFailed
+    key: development_id
+    delivery: at-least-once
+  - id: invoicing.cfdi-cancelled
+    title: CFDI cancelled
+    description: A CFDI was cancelled under SAT rules.
+    status: planned
+    producer: invoicing
+    consumers: [notifications]
+    message: habbyte.invoicing.events.v1.CfdiCancelled
+    key: development_id
+    delivery: at-least-once
+  - id: community.announcement-published
+    title: Announcement published
+    description: An announcement was published to its audience.
+    status: planned
+    producer: community
+    consumers: [notifications]
+    message: habbyte.community.events.v1.AnnouncementPublished
+    key: development_id
+    delivery: at-least-once
+  - id: amenities.reservation-requested
+    title: Reservation requested
+    description: A resident requested an amenity reservation.
+    status: planned
+    producer: amenities
+    consumers: [notifications]
+    message: habbyte.amenities.events.v1.ReservationRequested
+    key: development_id
+    delivery: at-least-once
+  - id: amenities.reservation-confirmed
+    title: Reservation confirmed
+    description: A reservation was confirmed. Finance charges its cost and deposit.
+    status: planned
+    producer: amenities
+    consumers: [finance, notifications]
+    message: habbyte.amenities.events.v1.ReservationConfirmed
+    key: development_id
+    delivery: at-least-once
+  - id: amenities.reservation-cancelled
+    title: Reservation cancelled
+    description: A reservation was cancelled.
+    status: planned
+    producer: amenities
+    consumers: [notifications]
+    message: habbyte.amenities.events.v1.ReservationCancelled
+    key: development_id
+    delivery: at-least-once
+  - id: operations.task-assigned
+    title: Task assigned
+    description: A task was assigned.
+    status: planned
+    producer: operations
+    consumers: [notifications]
+    message: habbyte.operations.events.v1.TaskAssigned
+    key: development_id
+    delivery: at-least-once
+  - id: operations.task-finished
+    title: Task finished
+    description: A task was marked finished, with its evidence.
+    status: planned
+    producer: operations
+    consumers: [notifications]
+    message: habbyte.operations.events.v1.TaskFinished
+    key: development_id
+    delivery: at-least-once
+  - id: operations.task-validated
+    title: Task validated
+    description: A finished task was validated.
+    status: planned
+    producer: operations
+    consumers: [notifications]
+    message: habbyte.operations.events.v1.TaskValidated
+    key: development_id
+    delivery: at-least-once
+  - id: accesscontrol.credential-issued
+    title: Credential issued
+    description: A credential was issued to a person.
+    status: planned
+    producer: accesscontrol
+    consumers: [audit]
+    message: habbyte.accesscontrol.events.v1.CredentialIssued
+    key: development_id
+    delivery: at-least-once
+  - id: accesscontrol.credential-revoked
+    title: Credential revoked
+    description: A credential was revoked.
+    status: planned
+    producer: accesscontrol
+    consumers: [audit]
+    message: habbyte.accesscontrol.events.v1.CredentialRevoked
+    key: development_id
+    delivery: at-least-once
+  - id: accesscontrol.entry-recorded
+    title: Entry recorded
+    description: A person entered or left through an access point.
+    status: planned
+    producer: accesscontrol
+    message: habbyte.accesscontrol.events.v1.EntryRecorded
+    key: development_id
+    delivery: at-least-once
+  - id: devices.command-applied
+    title: Device command applied
+    description: A vendor confirmed a command to a device.
+    status: planned
+    producer: devices
+    consumers: [accesscontrol]
+    message: habbyte.devices.events.v1.CommandApplied
+    key: development_id
+    delivery: at-least-once
+  - id: devices.event-received
+    title: Device event received
+    description: A vendor reported an event from a device.
+    status: planned
+    producer: devices
+    consumers: [accesscontrol]
+    message: habbyte.devices.events.v1.EventReceived
+    key: development_id
+    delivery: at-least-once
+  - id: devices.device-offline
+    title: Device offline
+    description: A device stopped reporting.
+    status: planned
+    producer: devices
+    consumers: [notifications]
+    message: habbyte.devices.events.v1.DeviceOffline
+    key: development_id
+    delivery: at-least-once
+  - id: files.uploaded
+    title: File uploaded
+    description: A file finished uploading to S3.
+    status: planned
+    producer: files
+    consumers: [operations, finance]
+    message: habbyte.files.events.v1.Uploaded
+    key: development_id
     delivery: at-least-once

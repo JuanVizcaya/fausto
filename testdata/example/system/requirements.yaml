@@ -6,64 +6,90 @@
 #   healthcheck   a health check is defined and enabled
 #   memory-limit  deploy.resources.limits.memory is set
 #   hardening     read-only root filesystem, cap_drop ALL, no-new-privileges
-#   exposure      only edge components publish ports
+#   exposure      only edge components publish ports beyond loopback
 requirements:
   - id: health-checks
-    title: Every running component reports its health
+    title: Every running container reports its health
     category: operability
-    statement: Each service and database has a health check, so Compose and orchestrators only route to healthy instances.
+    statement: Each container has a health check, so Compose and Caddy only route to healthy instances.
     applies_to: {kinds: [service, gateway, database]}
     verified_by: runtime/healthcheck
 
   - id: resource-limits
     title: Memory is bounded
     category: operability
-    statement: Every container has a memory limit, so one runaway service cannot starve the others.
+    statement: Every container has a memory limit that fits the host's budget (Postgres about 2 GB, Keycloak 1.5 GB, the backend under 1 GB, Caddy under 128 MB).
     applies_to: {kinds: [service, gateway, database]}
     verified_by: runtime/memory-limit
 
   - id: least-privilege
-    title: Services run with least privilege
+    title: Containers run with least privilege
     category: security
-    statement: Service containers have a read-only root filesystem, drop all Linux capabilities, and cannot gain new privileges.
-    applies_to: {kinds: [service, gateway]}
+    statement: The backend and Caddy have a read-only root filesystem, drop all Linux capabilities, and cannot gain new privileges. Keycloak doesn't yet (risk keycloak-not-hardened).
+    applies_to: {components: [habbyte, caddy]}
     verified_by: runtime/hardening
 
   - id: internal-only
     title: Only the edge is reachable from outside
     category: security
-    statement: Domain services and databases publish no ports; clients reach the system only through edge components.
+    statement: Only Caddy is published, on 80 and 443. Postgres and Keycloak's admin console listen only on loopback; in production, admins reach them through SSM port forwarding.
     verified_by: runtime/exposure
 
   - id: tenant-isolation
-    title: Every query is scoped to a tenant
+    title: No query crosses developments
     category: security
-    statement: Domain services take the tenant from every request and never return or change another tenant's data.
-    applies_to: {layers: [domain]}
+    statement: No query returns or changes data of a development the caller has no grant in, enforced twice, by the application and by Postgres row-level security.
+    applies_to: {layers: [modules]}
 
   - id: graceful-shutdown
     title: Shutdown drains in-flight requests
     category: availability
-    statement: On SIGTERM a service stops accepting work and finishes in-flight requests before exiting.
-    target: drains within 10 s
-    applies_to: {kinds: [service, gateway]}
+    statement: On SIGTERM the backend stops accepting work and finishes in-flight requests before exiting.
+    target: drains within SHUTDOWN_TIMEOUT (10 s), below the 15 s stop grace period
+    applies_to: {components: [habbyte]}
+
+  - id: availability
+    title: The service is up
+    category: availability
+    statement: The API and sign-in are available, excluding announced night maintenance.
+    target: 99.5% monthly
+    applies_to: {components: [api, keycloak]}
 
   - id: api-latency
     title: The public API is fast
     category: performance
-    statement: Read endpoints of the public API respond quickly under normal load.
-    target: p99 < 300 ms for reads
+    statement: Endpoints respond quickly under normal load, excluding calls to providers.
+    target: p95 < 300 ms for reads, < 800 ms for writes
     applies_to: {components: [api]}
 
   - id: backups
-    title: Data survives the loss of a database
+    title: Data survives the loss of the host
     category: durability
-    statement: Each database is backed up and restores are tested.
-    target: RPO 24 h, RTO 4 h
+    statement: Both databases are archived continuously (WAL-G to S3) with a nightly base backup, and a restore drill runs monthly and before the pilot.
+    target: RPO 15 min, RTO 4 h
     applies_to: {kinds: [database]}
+
+  - id: traceability
+    title: Governance and money changes are traceable
+    category: security
+    statement: Every governance, role and money change records actor, time, action, and before and after in audit.
+    applies_to: {components: [audit, iam, developments, finance]}
+
+  - id: fiscal-retention
+    title: Fiscal records are kept five years
+    category: durability
+    statement: Accounting records and CFDI are kept at least 5 years (Código Fiscal de la Federación).
+    applies_to: {components: [finance, invoicing, files]}
+
+  - id: door-sync
+    title: Credential changes reach doors quickly
+    category: availability
+    statement: Doors keep working with Habbyte down, and credential changes reach devices within 5 minutes or the admin is alerted.
+    target: 5 min
+    applies_to: {components: [accesscontrol, devices]}
 
   - id: pii-declared
     title: Personal data is declared
     category: privacy
-    statement: Every table that stores personal data lists those fields under data.pii in system.yaml.
-    applies_to: {kinds: [service]}
+    statement: Every table that stores personal data lists those fields under data.pii in system.yaml. Names, emails and phones live only in iam, and biometric templates are never stored.
+    applies_to: {layers: [modules]}
