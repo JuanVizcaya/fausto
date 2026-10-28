@@ -256,6 +256,23 @@ func TestViolations(t *testing.T) {
 		want   string // substring of a finding
 	}{
 		{
+			name:  "auditor owns paths",
+			check: "schema",
+			mutate: func(f map[string]string) {
+				f["system/agents/aud.yaml"] = "id: aud\nname: Auditor\nkind: auditor\nscope: Reviews.\nowns: [backend/]\n"
+			},
+			want: "maxItems",
+		},
+		{
+			name:  "component owned by an auditor",
+			check: "schema",
+			mutate: func(f map[string]string) {
+				f["system/agents/aud.yaml"] = "id: aud\nname: Auditor\nkind: auditor\nscope: Reviews.\n"
+				f["system/system.yaml"] = strings.Replace(f["system/system.yaml"], "owner: gw", "owner: aud", 1)
+			},
+			want: `owner "aud" is an auditor, which owns nothing`,
+		},
+		{
 			name:  "domain service imports gateway code",
 			check: "layers",
 			mutate: func(f map[string]string) {

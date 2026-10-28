@@ -3,17 +3,16 @@
   "$id": "agent.schema.json",
   "title": "Agent charter",
   "type": "object",
-  "required": ["id", "name", "kind", "scope", "owns"],
+  "required": ["id", "name", "kind", "scope"],
   "additionalProperties": false,
   "properties": {
     "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
     "name": {"type": "string"},
-    "kind": {"enum": ["agent", "human"]},
+    "kind": {"enum": ["agent", "human", "auditor"], "description": "agent: builds its owned paths from fausto tasks. human: a person, such as the orchestrator. auditor: reviews pull requests against the spec and owns nothing."},
     "scope": {"type": "string"},
     "owns": {
       "type": "array",
-      "minItems": 1,
-      "description": "Files, or directories ending in /. The most specific entry across all agents owns a file.",
+      "description": "Files, or directories ending in /. The most specific entry across all agents owns a file. Required, and not empty, except for an auditor, which owns nothing.",
       "items": {"type": "string", "minLength": 1}
     },
     "rules": {"type": "array", "items": {"type": "string"}},
@@ -23,5 +22,8 @@
       "items": {"type": "string", "pattern": "^@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:/[A-Za-z0-9._-]+)?$"},
       "uniqueItems": true
     }
-  }
+  },
+  "if": {"properties": {"kind": {"const": "auditor"}}},
+  "then": {"properties": {"owns": {"maxItems": 0}}},
+  "else": {"required": ["owns"], "properties": {"owns": {"minItems": 1}}}
 }

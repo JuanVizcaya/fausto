@@ -263,6 +263,9 @@ func view(s *spec.Spec) specView {
 		v.Roadmap.Milestones = []spec.Milestone{}
 	}
 	for _, a := range s.Agents {
+		if a.Owns == nil {
+			a.Owns = []string{} // an auditor owns nothing
+		}
 		v.Agents = append(v.Agents, agentView{Agent: a, File: a.File})
 	}
 	for _, d := range s.Decisions {

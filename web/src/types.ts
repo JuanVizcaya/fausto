@@ -154,7 +154,7 @@ export interface Term {
 export interface Agent {
   id: string;
   name: string;
-  kind: "agent" | "human";
+  kind: "agent" | "human" | "auditor";
   scope: string;
   owns: string[];
   rules?: string[];

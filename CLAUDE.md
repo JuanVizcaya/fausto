@@ -52,7 +52,8 @@ fast-start version.
   (fausto's own clone, branches pushed and pull requests opened with
   `FAUSTO_GITHUB_TOKEN`)
 - `internal/agentdef` — agent definitions (as files, or the description and
-  prompt `claude --agents` takes) and `.github/CODEOWNERS` from charters
+  prompt `claude --agents` takes) and `.github/CODEOWNERS` from charters;
+  an `auditor` charter's definition reviews instead (`auditor.go`)
 - `internal/client` — the agent side of fausto's API, and a clone's
   connection in `.fausto/config.json`
 - `internal/mcp` — `fausto mcp`, the stdio MCP server agents use

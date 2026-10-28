@@ -142,8 +142,10 @@ func checkReferences(s *spec.Spec) []Finding {
 		if !layers[c.Layer] {
 			add(c.ID, systemFile, "unknown layer %q", c.Layer)
 		}
-		if _, ok := agents[c.Owner]; !ok && s.Charters != "" {
+		if a, ok := agents[c.Owner]; !ok && s.Charters != "" {
 			add(c.ID, systemFile, "owner %q is not an agent in %s/agents/", c.Owner, spec.Dir)
+		} else if ok && a.Kind == "auditor" {
+			add(c.ID, systemFile, "owner %q is an auditor, which owns nothing", c.Owner)
 		}
 		for _, t := range c.Tech {
 			if !tech[t] {

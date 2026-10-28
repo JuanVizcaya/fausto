@@ -88,3 +88,34 @@ func keys(m map[string][]byte) []string {
 	}
 	return out
 }
+
+func TestRenderAuditor(t *testing.T) {
+	s := fixture()
+	s.Principles.Principles = []spec.Principle{
+		{ID: "contracts-only", Title: "Modules meet through contracts", Rationale: "So they can be split.", Checks: []string{"layers", "module-boundaries"}},
+		{ID: "audit-in-one-tx", Title: "Audit rows commit with the change", Rationale: "So a change always has its audit fact.", Checks: []string{"review"}},
+		{ID: "no-pii-in-logs", Title: "No personal data in logs", Rationale: "LFPDPPP."},
+	}
+	s.Agents = append(s.Agents, spec.Agent{ID: "auditor", Name: "Auditor", Kind: "auditor", Scope: "Reviews pull requests."})
+	if _, ok := Want(s)[Path("auditor")]; !ok {
+		t.Fatal("no definition for the auditor")
+	}
+	got := string(Render(s, &s.Agents[2]))
+	for _, want := range []string{
+		"Use it to review a pull request",
+		"You never change files",
+		"- `audit-in-one-tx`: **Audit rows commit with the change** So a change always has its audit fact.",
+		"- `no-pii-in-logs`: **No personal data in logs** LFPDPPP.",
+		"- `contracts-only`: Modules meet through contracts (checked by layers, module-boundaries)",
+		"**blocking**",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("auditor definition lacks %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"What you own", "fausto task pull"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("auditor definition has %q", unwanted)
+		}
+	}
+}

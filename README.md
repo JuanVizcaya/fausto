@@ -412,6 +412,28 @@ in the repository, proposals regenerate them when charters change, and the
 `agents` check fails when they are stale; don't edit them. For charters
 fausto keeps, the definitions aren't part of the project: fausto serves them.
 
+### An auditor
+
+A charter of kind `auditor` owns no paths and no components: it reviews.
+Its generated definition lists the principles marked `review` (or with no
+checks) in full, the others with the checks that cover them, and has it
+review a diff against them, the accepted decisions, charter ownership, and
+the declared components, events and risks. Each finding cites the rule it
+breaks and is marked blocking or advisory; it never changes files.
+
+```yaml
+# system/agents/auditor.yaml
+id: auditor
+name: Auditor
+kind: auditor
+scope: Reviews every pull request against the spec before people do.
+```
+
+`fausto agents -print auditor` writes the definition to stdout, so a pull
+request's workflow can hand it to Claude Code as the reviewer's prompt; with
+`-spec-from`, it reads the handed-off spec ref (see
+[Handing pull requests to the project's workflows](#handing-pull-requests-to-the-projects-workflows)).
+
 To work an agent's open tasks, start it from your clone:
 
 ```sh

@@ -110,3 +110,14 @@ principles:
 		}
 	}
 }
+
+func TestAuditorCharterPasses(t *testing.T) {
+	f := fixture(t)
+	f["system/agents/aud.yaml"] = "id: aud\nname: Auditor\nkind: auditor\nscope: Reviews pull requests against the spec.\n"
+	report := runFixture(t, f)
+	for _, r := range report.Results {
+		if r.Status != Pass {
+			t.Errorf("%s: status %s, findings %+v", r.Check, r.Status, r.Findings)
+		}
+	}
+}

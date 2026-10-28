@@ -57,9 +57,10 @@ const usage = `usage:
                                the project's code, so only where it may run;
                                -spec-from reads the spec fausto keeps from dir/system,
                                such as a pull request's handed-off spec ref
-  fausto agents [-root dir] [-project id]
+  fausto agents [-root dir] [-project id] [-spec-from dir] [-print id]
                                regenerate .claude/agents and .github/CODEOWNERS
-                               from the charters (fausto's, or system/agents)
+                               from the charters (fausto's, or system/agents);
+                               -print writes one agent's definition to stdout instead
   fausto serve [-root dir] [-project id] [-addr host:port] [-base branch] [-author "Name <email>"] [-repo url] [-poll 1m]
                                the web UI, for every project (or only -root)
   fausto project list
@@ -207,6 +208,8 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	root := rootFlag(fs)
 	project := projectFlag(fs)
+	specFrom := fs.String("spec-from", "", "read the spec fausto keeps from `dir`/system instead of fausto")
+	printID := fs.String("print", "", "write agent `id`'s definition to stdout, and nothing else")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -216,9 +219,30 @@ func runAgents(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	s, err := spec.LoadWith(*root, specOptions(ctx, *root, *project, stderr))
+	var opts spec.Options
+	if *specFrom != "" {
+		files, err := spec.ReadDir(*specFrom)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 2
+		}
+		opts.Files = files
+	} else {
+		opts = specOptions(ctx, *root, *project, stderr)
+	}
+	s, err := spec.LoadWith(*root, opts)
 	if err != nil {
 		fmt.Fprintln(stderr, "load the spec:", err)
+		return 1
+	}
+	if *printID != "" {
+		for i := range s.Agents {
+			if a := &s.Agents[i]; a.ID == *printID && a.Kind != "human" {
+				stdout.Write(agentdef.Render(s, a))
+				return 0
+			}
+		}
+		fmt.Fprintf(stderr, "no agent %q in the charters\n", *printID)
 		return 1
 	}
 	files, err := agentdef.Sync(*root, s)
