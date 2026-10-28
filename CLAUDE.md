@@ -44,7 +44,9 @@ fast-start version.
   to applied or withdrawn once merged or closed, reject;
   `specfiles.go` lays the spec fausto keeps (as revisions) over `system/`
 - `internal/prcheck` — checks pull requests against the spec fausto keeps
-  and reports on GitHub; `internal/github` is the API client it shares
+  and reports on GitHub; with `FAUSTO_PR_HANDOFF`, also publishes the spec
+  as `refs/fausto/spec/r<N>` and dispatches `fausto-spec` for the project's
+  workflows (`handoff.go`); `internal/github` is the API client it shares
   with `internal/source`
 - `internal/source` — a project's repository: a local clone, or GitHub
   (fausto's own clone, branches pushed and pull requests opened with

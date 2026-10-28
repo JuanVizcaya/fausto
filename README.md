@@ -384,6 +384,25 @@ fine-grained token on that repository with commit statuses and pull requests
 (read and write) and contents (read). For a spec in the repository, use the
 check workflow instead (see [In a project's CI](#in-a-projects-ci)).
 
+### Handing pull requests to the project's workflows
+
+fausto's server never runs a pull request's code, so project checks, and
+reviewers that read the code against the spec, run in the project's CI. That
+CI can't read fausto's database either, so with `FAUSTO_PR_HANDOFF=true`,
+before reporting on a pull request fausto also:
+
+1. publishes the spec revision it checked against as a hidden ref,
+   `refs/fausto/spec/r<N>`: a commit holding only `system/`, never a branch
+   and never merged, the same commit every time for the same revision;
+2. sends a `repository_dispatch` event, `fausto-spec`, with
+   `{pr, head_sha, revision, spec_ref}`.
+
+A workflow on that event checks out `head_sha`, fetches the ref into
+`system/`, and reports its own commit status (see the check workflow's
+`spec-ref` input). The token also needs contents (read and write). If the
+hand-off fails, fausto reports nothing and tries the pull request again on
+the next poll.
+
 ## Running agents
 
 Each agent charter of kind `agent` has a generated Claude Code agent
